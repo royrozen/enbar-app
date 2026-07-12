@@ -64,7 +64,7 @@ function RequireManager({ children }) {
   const p = getProfile()
   if (!p) return <Navigate to="/" replace />
   if (p === 'team_lead') return <Navigate to="/home" replace />
-  return children
+  return <AdminGate>{children}</AdminGate>
 }
 
 // Admin area — factory manager only. Installation manager is redirected to the dashboard.
