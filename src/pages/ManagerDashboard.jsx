@@ -9,6 +9,7 @@ import {
   SpinnerIcon,
   UsersIcon,
   ClipboardIcon,
+  PackageIcon,
 } from '../components/Icons'
 import { supabase, photoUrl } from '../lib/supabase'
 import { formatDate, todayISO, daysAgoISO } from '../lib/format'
@@ -26,12 +27,12 @@ export default function ManagerDashboard() {
   const [leads, setLeads] = useState([])
   const [filters, setFilters] = useState(defaultFilters)
   const [reports, setReports] = useState(null)
-  const [stats, setStats] = useState({ today: null, pending: null })
+  const [stats, setStats] = useState({ today: null, pending: null, pendingParts: null })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   const loadMeta = useCallback(async () => {
-    const [projRes, leadRes, todayRes, pendingRes] = await Promise.all([
+    const [projRes, leadRes, todayRes, pendingRes, pendingPartsRes] = await Promise.all([
       supabase.from('projects').select('id, name').order('name'),
       supabase.from('team_leads').select('id, name').order('name'),
       supabase
@@ -42,10 +43,18 @@ export default function ManagerDashboard() {
         .from('reports')
         .select('id', { count: 'exact', head: true })
         .eq('extras_status', 'pending'),
+      supabase
+        .from('part_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pending'),
     ])
     setProjects(projRes.data || [])
     setLeads(leadRes.data || [])
-    setStats({ today: todayRes.count ?? 0, pending: pendingRes.count ?? 0 })
+    setStats({
+      today: todayRes.count ?? 0,
+      pending: pendingRes.count ?? 0,
+      pendingParts: pendingPartsRes.count ?? 0,
+    })
   }, [])
 
   const loadReports = useCallback(async () => {
@@ -113,7 +122,7 @@ export default function ManagerDashboard() {
         </div>
 
         {/* Status row */}
-        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="card p-4 flex items-center gap-4">
             <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-primary">
               <ClipboardIcon size={24} />
@@ -148,6 +157,17 @@ export default function ManagerDashboard() {
               </p>
             </div>
           </button>
+          <Link to="/manager/parts" className="card p-4 flex items-center gap-4 hover:border-accent transition-colors duration-200">
+            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-white">
+              <PackageIcon size={24} />
+            </span>
+            <div>
+              <p className="text-3xl font-black leading-none text-accent">
+                {stats.pendingParts ?? '—'}
+              </p>
+              <p className="text-sm text-primary mt-1">חלקים ממתינים — לחצו לצפייה</p>
+            </div>
+          </Link>
         </div>
 
         {/* Filters */}

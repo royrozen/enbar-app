@@ -5,6 +5,12 @@ export const STATUS_LABELS = {
   rejected: 'נדחה',
 }
 
+export const PART_STATUS_LABELS = {
+  pending: 'ממתין',
+  in_progress: 'בטיפול',
+  ready: 'מוכן לאיסוף',
+}
+
 // ISO (yyyy-mm-dd) -> DD/MM/YYYY
 export function formatDate(iso) {
   if (!iso) return ''

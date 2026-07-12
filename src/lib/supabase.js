@@ -10,6 +10,7 @@ export const supabase = createClient(url, anonKey)
 
 export const PHOTO_BUCKET = 'report-photos'
 export const SIGNED_DOC_BUCKET = 'signed-approvals'
+export const PART_PHOTO_BUCKET = 'part-photos'
 
 export function photoUrl(storagePath) {
   return supabase.storage.from(PHOTO_BUCKET).getPublicUrl(storagePath).data.publicUrl
@@ -17,6 +18,10 @@ export function photoUrl(storagePath) {
 
 export function signedDocUrl(storagePath) {
   return supabase.storage.from(SIGNED_DOC_BUCKET).getPublicUrl(storagePath).data.publicUrl
+}
+
+export function partPhotoUrl(storagePath) {
+  return supabase.storage.from(PART_PHOTO_BUCKET).getPublicUrl(storagePath).data.publicUrl
 }
 
 // Single active team lead in Phase 1 — reports are attributed automatically.

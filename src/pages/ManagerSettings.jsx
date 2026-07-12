@@ -6,6 +6,10 @@ import {
   HardHatIcon,
   PlusIcon,
   SpinnerIcon,
+  PackageIcon,
+  PencilIcon,
+  CheckIcon,
+  XIcon,
 } from '../components/Icons'
 import { supabase } from '../lib/supabase'
 
@@ -13,6 +17,7 @@ const TABS = [
   { key: 'clients', label: 'לקוחות', Icon: UsersIcon },
   { key: 'projects', label: 'פרויקטים', Icon: BuildingIcon },
   { key: 'leads', label: 'ראשי צוות', Icon: HardHatIcon },
+  { key: 'catalog', label: 'קטלוג חלקים', Icon: PackageIcon },
 ]
 
 function ActiveToggle({ item, onToggle, busy }) {
@@ -318,6 +323,145 @@ function LeadsTab() {
   )
 }
 
+function CatalogTab() {
+  const { items, error, setError, load, toggleActive } = useAdminList('catalog_items')
+  const [name, setName] = useState('')
+  const [formError, setFormError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const [editingId, setEditingId] = useState(null)
+  const [editValue, setEditValue] = useState('')
+  const [editError, setEditError] = useState('')
+  const [editBusy, setEditBusy] = useState(false)
+
+  async function add(e) {
+    e.preventDefault()
+    if (!name.trim()) {
+      setFormError('יש להזין שם חלק')
+      return
+    }
+    setFormError('')
+    setBusy(true)
+    const { error: err } = await supabase.from('catalog_items').insert({ name: name.trim() })
+    setBusy(false)
+    if (err) {
+      setFormError('הוספת החלק נכשלה — נסו שוב')
+      return
+    }
+    setName('')
+    load()
+  }
+
+  function startEdit(item) {
+    setEditingId(item.id)
+    setEditValue(item.name)
+    setEditError('')
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setEditValue('')
+    setEditError('')
+  }
+
+  async function saveEdit(item) {
+    if (!editValue.trim()) {
+      setEditError('יש להזין שם חלק')
+      return
+    }
+    setEditBusy(true)
+    const { error: err } = await supabase
+      .from('catalog_items')
+      .update({ name: editValue.trim() })
+      .eq('id', item.id)
+    setEditBusy(false)
+    if (err) {
+      setEditError('השמירה נכשלה — נסו שוב')
+      return
+    }
+    setEditingId(null)
+    load()
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <form onSubmit={add} className="card p-4">
+        <h3 className="font-bold mb-3">הוספת חלק לקטלוג</h3>
+        <div className="flex gap-2 items-start flex-wrap">
+          <div className="flex-1 min-w-[220px]">
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)}
+              placeholder="שם החלק" aria-label="שם החלק" />
+            {formError && <p className="err">{formError}</p>}
+          </div>
+          <button className="btn btn-accent" disabled={busy}>
+            {busy ? <SpinnerIcon size={18} /> : <PlusIcon size={18} />}
+            הוספה
+          </button>
+        </div>
+      </form>
+
+      {error && <p className="err">{error}</p>}
+      <ul className="flex flex-col gap-2">
+        {(items || []).map((c) => (
+          <li key={c.id} className={`card p-4 flex items-center gap-3 ${c.is_active ? '' : 'opacity-55'}`}>
+            {editingId === c.id ? (
+              <div className="flex-1 min-w-0">
+                <input
+                  className="input !min-h-[44px]"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  autoFocus
+                />
+                {editError && <p className="err">{editError}</p>}
+              </div>
+            ) : (
+              <p className="flex-1 font-bold truncate">
+                {c.name}
+                {!c.is_active && <span className="text-xs text-primary font-normal ms-2">(מושבת)</span>}
+              </p>
+            )}
+
+            {editingId === c.id ? (
+              <>
+                <button
+                  className="btn btn-outline text-sm !min-h-[40px]"
+                  disabled={editBusy}
+                  onClick={() => saveEdit(c)}
+                  aria-label="שמירה"
+                >
+                  {editBusy ? <SpinnerIcon size={16} /> : <CheckIcon size={16} />}
+                </button>
+                <button
+                  className="btn btn-ghost text-sm !min-h-[40px]"
+                  disabled={editBusy}
+                  onClick={cancelEdit}
+                  aria-label="ביטול"
+                >
+                  <XIcon size={16} />
+                </button>
+              </>
+            ) : (
+              <button
+                className="btn btn-ghost text-sm !min-h-[40px]"
+                onClick={() => startEdit(c)}
+                aria-label="עריכת שם"
+              >
+                <PencilIcon size={16} />
+              </button>
+            )}
+
+            <ActiveToggle item={c} onToggle={() => toggleActive(c)} />
+          </li>
+        ))}
+        {items?.length === 0 && <li className="card p-6 text-center text-primary">אין חלקים בקטלוג עדיין</li>}
+        {items === null && (
+          <li className="flex justify-center py-8 text-primary"><SpinnerIcon size={28} /></li>
+        )}
+      </ul>
+    </div>
+  )
+}
+
 export default function ManagerSettings() {
   const [tab, setTab] = useState('clients')
 
@@ -351,6 +495,7 @@ export default function ManagerSettings() {
           {tab === 'clients' && <ClientsTab />}
           {tab === 'projects' && <ProjectsTab />}
           {tab === 'leads' && <LeadsTab />}
+          {tab === 'catalog' && <CatalogTab />}
         </div>
       </main>
     </div>
