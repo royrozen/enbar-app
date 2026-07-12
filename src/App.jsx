@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { getProfile } from './lib/profile'
 import ProfilePicker from './pages/ProfilePicker'
@@ -7,6 +8,53 @@ import ReportView from './pages/ReportView'
 import ManagerDashboard from './pages/ManagerDashboard'
 import ManagerReport from './pages/ManagerReport'
 import ManagerSettings from './pages/ManagerSettings'
+
+// Phase-1 stopgap: a single shared password gates the admin area, since there
+// is no real auth yet (see CLAUDE.md). Not meant to withstand a determined
+// attacker reading the client bundle — just stops casual/accidental access.
+const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || 'enbar2026'
+const ADMIN_UNLOCK_KEY = 'enbar_admin_unlocked'
+
+function AdminGate({ children }) {
+  const [unlocked, setUnlocked] = useState(() => sessionStorage.getItem(ADMIN_UNLOCK_KEY) === '1')
+  const [pw, setPw] = useState('')
+  const [err, setErr] = useState('')
+
+  if (unlocked) return children
+
+  function submit(e) {
+    e.preventDefault()
+    if (pw === ADMIN_PASSWORD) {
+      sessionStorage.setItem(ADMIN_UNLOCK_KEY, '1')
+      setUnlocked(true)
+    } else {
+      setErr('סיסמה שגויה')
+    }
+  }
+
+  return (
+    <main className="min-h-dvh flex flex-col items-center justify-center px-6 py-10">
+      <h1 className="text-xl font-black mb-6">אזור ניהול — נדרשת סיסמה</h1>
+      <form onSubmit={submit} className="w-full max-w-sm flex flex-col gap-3">
+        <input
+          type="password"
+          value={pw}
+          onChange={(e) => {
+            setPw(e.target.value)
+            setErr('')
+          }}
+          placeholder="סיסמה"
+          autoFocus
+          className="input"
+        />
+        {err && <p className="err">{err}</p>}
+        <button type="submit" className="btn-accent btn w-full">
+          כניסה
+        </button>
+      </form>
+    </main>
+  )
+}
 
 function RequireProfile({ children }) {
   return getProfile() ? children : <Navigate to="/" replace />
@@ -25,7 +73,7 @@ function RequireFactoryManager({ children }) {
   if (!p) return <Navigate to="/" replace />
   if (p === 'team_lead') return <Navigate to="/home" replace />
   if (p !== 'factory_manager') return <Navigate to="/manager" replace />
-  return children
+  return <AdminGate>{children}</AdminGate>
 }
 
 export default function App() {
