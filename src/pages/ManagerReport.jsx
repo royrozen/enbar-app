@@ -40,7 +40,7 @@ export default function ManagerReport() {
       const { data, error: err } = await supabase
         .from('reports')
         .select(
-          '*, projects(id, name, city, clients(id, name, contact_person, phone, email)), team_leads(name), report_photos(*)',
+          '*, projects(id, name, city, contact_person, phone, email, clients(id, name)), team_leads(name), report_photos(*)',
         )
         .eq('id', id)
         .single()

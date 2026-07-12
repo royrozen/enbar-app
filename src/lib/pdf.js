@@ -53,7 +53,7 @@ function signatureField(label) {
 }
 
 // report must include: report_date, extras_description, extras_edited,
-// projects { name, city, clients { name, contact_person, phone, email } }
+// projects { name, city, contact_person, phone, email, clients { name } }
 export function generateExtrasPdf(report) {
   const project = report.projects || {}
   const client = project.clients || {}
@@ -63,12 +63,12 @@ export function generateExtrasPdf(report) {
     detailRow('פרויקט', project.city ? `${project.name} — ${project.city}` : project.name),
     detailRow('לקוח', client.name),
   ]
-  if (client.contact_person || client.phone) {
+  if (project.contact_person || project.phone) {
     detailsBody.push(
-      detailRow('איש קשר', [client.contact_person, client.phone].filter(Boolean).join(' · ')),
+      detailRow('איש קשר', [project.contact_person, project.phone].filter(Boolean).join(' · ')),
     )
   }
-  if (client.email) detailsBody.push(detailRow('דוא"ל', client.email))
+  if (project.email) detailsBody.push(detailRow('דוא"ל', project.email))
   detailsBody.push(detailRow('תאריך הדיווח', formatDate(report.report_date)))
   detailsBody.push(detailRow('תאריך הפקת המסמך', formatDate(todayISO())))
 

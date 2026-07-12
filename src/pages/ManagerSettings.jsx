@@ -68,9 +68,14 @@ function useAdminList(table, select = '*') {
 
 function ClientsTab() {
   const { items, error, setError, load, toggleActive } = useAdminList('clients')
-  const [form, setForm] = useState({ name: '', contact_person: '', phone: '', email: '' })
+  const [form, setForm] = useState({ name: '' })
   const [formError, setFormError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [expandedClientId, setExpandedClientId] = useState(null)
+  const [clientProjects, setClientProjects] = useState({})
+  const [loadingProjects, setLoadingProjects] = useState({})
+  const [selectedProject, setSelectedProject] = useState(null)
+  const [togglingProjectId, setTogglingProjectId] = useState(null)
 
   async function add(e) {
     e.preventDefault()
@@ -82,17 +87,59 @@ function ClientsTab() {
     setBusy(true)
     const { error: err } = await supabase.from('clients').insert({
       name: form.name.trim(),
-      contact_person: form.contact_person.trim() || null,
-      phone: form.phone.trim() || null,
-      email: form.email.trim() || null,
     })
     setBusy(false)
     if (err) {
       setFormError('הוספת הלקוח נכשלה — נסו שוב')
       return
     }
-    setForm({ name: '', contact_person: '', phone: '', email: '' })
+    setForm({ name: '' })
     load()
+  }
+
+  async function toggleExpand(clientId) {
+    if (expandedClientId === clientId) {
+      setExpandedClientId(null)
+      return
+    }
+    setExpandedClientId(clientId)
+    if (!clientProjects[clientId]) {
+      setLoadingProjects((p) => ({ ...p, [clientId]: true }))
+      const { data, error: err } = await supabase
+        .from('projects')
+        .select('id, name, city, contact_person, phone, email, is_active')
+        .eq('client_id', clientId)
+        .order('created_at', { ascending: false })
+      if (err) {
+        console.error('Error fetching projects:', err)
+        setClientProjects((p) => ({ ...p, [clientId]: [] }))
+      } else {
+        setClientProjects((p) => ({ ...p, [clientId]: data || [] }))
+      }
+      setLoadingProjects((p) => ({ ...p, [clientId]: false }))
+    }
+  }
+
+  async function toggleProjectActive(project, clientId) {
+    if (togglingProjectId) return
+    setTogglingProjectId(project.id)
+    const { error: err } = await supabase
+      .from('projects')
+      .update({ is_active: !project.is_active })
+      .eq('id', project.id)
+    if (err) {
+      console.error('Error updating project:', err)
+      setTogglingProjectId(null)
+      return
+    }
+    // Update local state
+    const updatedProject = { ...project, is_active: !project.is_active }
+    setClientProjects((p) => ({
+      ...p,
+      [clientId]: p[clientId].map((pr) => (pr.id === project.id ? updatedProject : pr)),
+    }))
+    setSelectedProject(updatedProject)
+    setTogglingProjectId(null)
   }
 
   return (
@@ -103,21 +150,6 @@ function ClientsTab() {
           <label className="label !text-xs" htmlFor="c-name">שם הלקוח *</label>
           <input id="c-name" className="input" value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="למשל: י.ד. בנייה בעמ" />
-        </div>
-        <div>
-          <label className="label !text-xs" htmlFor="c-contact">איש קשר</label>
-          <input id="c-contact" className="input" value={form.contact_person}
-            onChange={(e) => setForm((f) => ({ ...f, contact_person: e.target.value }))} />
-        </div>
-        <div>
-          <label className="label !text-xs" htmlFor="c-phone">טלפון</label>
-          <input id="c-phone" className="input" type="tel" dir="ltr" value={form.phone}
-            onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} />
-        </div>
-        <div>
-          <label className="label !text-xs" htmlFor="c-email">דוא"ל</label>
-          <input id="c-email" className="input" type="email" dir="ltr" value={form.email}
-            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
         </div>
         {formError && <p className="err sm:col-span-2">{formError}</p>}
         <div className="sm:col-span-2">
@@ -131,17 +163,53 @@ function ClientsTab() {
       {error && <p className="err">{error}</p>}
       <ul className="flex flex-col gap-2">
         {(items || []).map((c) => (
-          <li key={c.id} className={`card p-4 flex items-center gap-3 ${c.is_active ? '' : 'opacity-55'}`}>
-            <div className="flex-1 min-w-0">
-              <p className="font-bold truncate">
-                {c.name}
-                {!c.is_active && <span className="text-xs text-primary font-normal ms-2">(מושבת)</span>}
-              </p>
-              <p className="text-sm text-primary truncate">
-                {[c.contact_person, c.phone, c.email].filter(Boolean).join(' · ') || '—'}
-              </p>
+          <li key={c.id} className="flex flex-col gap-2">
+            <div className={`card p-4 flex items-center gap-3 ${c.is_active ? '' : 'opacity-55'}`}>
+              <button
+                onClick={() => toggleExpand(c.id)}
+                className="flex items-center justify-center w-6 h-6 shrink-0 text-primary hover:text-foreground transition-colors"
+                title={expandedClientId === c.id ? 'סגור פרויקטים' : 'הצג פרויקטים'}
+              >
+                <svg className={`w-4 h-4 transition-transform ${expandedClientId === c.id ? 'rotate-90' : ''}`}
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold truncate">
+                  {c.name}
+                  {!c.is_active && <span className="text-xs text-primary font-normal ms-2">(מושבת)</span>}
+                </p>
+              </div>
+              <ActiveToggle item={c} onToggle={() => toggleActive(c)} />
             </div>
-            <ActiveToggle item={c} onToggle={() => toggleActive(c)} />
+            {expandedClientId === c.id && (
+              <div className="rounded-2xl border border-border bg-muted p-4 ms-4">
+                {loadingProjects[c.id] ? (
+                  <div className="flex justify-center py-4 text-primary"><SpinnerIcon size={24} /></div>
+                ) : (clientProjects[c.id] || []).length === 0 ? (
+                  <p className="text-center text-sm text-primary">אין פרויקטים ללקוח זה</p>
+                ) : (
+                  <ul className="flex flex-col gap-2">
+                    {clientProjects[c.id].map((p) => (
+                      <li key={p.id}>
+                        <button
+                          onClick={() => setSelectedProject(p)}
+                          className={`w-full text-start p-3 rounded-xl border-2 bg-white transition-colors ${
+                            p.is_active
+                              ? 'border-border hover:border-accent'
+                              : 'border-border opacity-50'
+                          }`}
+                        >
+                          <p className="font-semibold text-sm">{p.name}</p>
+                          {p.city && <p className="text-xs text-primary">{p.city}</p>}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </li>
         ))}
         {items?.length === 0 && <li className="card p-6 text-center text-primary">אין לקוחות עדיין</li>}
@@ -149,6 +217,56 @@ function ClientsTab() {
           <li className="flex justify-center py-8 text-primary"><SpinnerIcon size={28} /></li>
         )}
       </ul>
+
+      {selectedProject && (
+        <div className="fixed inset-0 bg-black/50 flex items-end z-50">
+          <div className="card w-full max-w-2xl rounded-t-2xl rounded-b-none p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center gap-3 mb-4">
+              <button
+                onClick={() => setSelectedProject(null)}
+                className="flex items-center justify-center w-6 h-6 shrink-0 text-primary hover:text-foreground transition-colors"
+                aria-label="סגירה"
+              >
+                <XIcon size={18} />
+              </button>
+              <h2 className="text-2xl font-bold flex-1">{selectedProject.name}</h2>
+              <ActiveToggle
+                item={selectedProject}
+                onToggle={() => toggleProjectActive(selectedProject, expandedClientId)}
+                busy={togglingProjectId === selectedProject.id}
+              />
+            </div>
+            <div className="space-y-4">
+              {selectedProject.city && (
+                <div>
+                  <p className="text-xs text-primary font-semibold">כתובת / עיר</p>
+                  <p className="text-sm">{selectedProject.city}</p>
+                </div>
+              )}
+              {(selectedProject.contact_person || selectedProject.phone) && (
+                <div>
+                  <p className="text-xs text-primary font-semibold">איש קשר</p>
+                  <p className="text-sm">
+                    {[selectedProject.contact_person, selectedProject.phone].filter(Boolean).join(' · ')}
+                  </p>
+                </div>
+              )}
+              {selectedProject.email && (
+                <div>
+                  <p className="text-xs text-primary font-semibold">דוא&quot;ל</p>
+                  <p className="text-sm">{selectedProject.email}</p>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => setSelectedProject(null)}
+              className="btn btn-accent w-full mt-6"
+            >
+              סגור
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -156,7 +274,7 @@ function ClientsTab() {
 function ProjectsTab() {
   const { items, error, setError, load, toggleActive } = useAdminList('projects', '*, clients(name)')
   const [clients, setClients] = useState([])
-  const [form, setForm] = useState({ name: '', client_id: '', city: '' })
+  const [form, setForm] = useState({ name: '', client_id: '', city: '', contact_person: '', phone: '', email: '' })
   const [formError, setFormError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -185,20 +303,23 @@ function ProjectsTab() {
       name: form.name.trim(),
       client_id: form.client_id,
       city: form.city.trim() || null,
+      contact_person: form.contact_person.trim() || null,
+      phone: form.phone.trim() || null,
+      email: form.email.trim() || null,
     })
     setBusy(false)
     if (err) {
       setFormError('הוספת הפרויקט נכשלה — נסו שוב')
       return
     }
-    setForm({ name: '', client_id: '', city: '' })
+    setForm({ name: '', client_id: '', city: '', contact_person: '', phone: '', email: '' })
     load()
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <form onSubmit={add} className="card p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <h3 className="font-bold sm:col-span-3">הוספת פרויקט חדש</h3>
+      <form onSubmit={add} className="card p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <h3 className="font-bold sm:col-span-2">הוספת פרויקט חדש</h3>
         <div>
           <label className="label !text-xs" htmlFor="p-name">שם הפרויקט *</label>
           <input id="p-name" className="input" value={form.name}
@@ -219,8 +340,23 @@ function ProjectsTab() {
           <input id="p-city" className="input" value={form.city}
             onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} />
         </div>
-        {formError && <p className="err sm:col-span-3">{formError}</p>}
-        <div className="sm:col-span-3">
+        <div>
+          <label className="label !text-xs" htmlFor="p-contact">איש קשר</label>
+          <input id="p-contact" className="input" value={form.contact_person}
+            onChange={(e) => setForm((f) => ({ ...f, contact_person: e.target.value }))} />
+        </div>
+        <div>
+          <label className="label !text-xs" htmlFor="p-phone">טלפון</label>
+          <input id="p-phone" className="input" type="tel" dir="ltr" value={form.phone}
+            onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} />
+        </div>
+        <div>
+          <label className="label !text-xs" htmlFor="p-email">דוא"ל</label>
+          <input id="p-email" className="input" type="email" dir="ltr" value={form.email}
+            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
+        </div>
+        {formError && <p className="err sm:col-span-2">{formError}</p>}
+        <div className="sm:col-span-2">
           <button className="btn btn-accent" disabled={busy}>
             {busy ? <SpinnerIcon size={18} /> : <PlusIcon size={18} />}
             הוספת פרויקט
@@ -244,7 +380,7 @@ function ProjectsTab() {
                 {!p.is_active && <span className="text-xs text-primary font-normal ms-2">(מושבת)</span>}
               </p>
               <p className="text-sm text-primary truncate">
-                {[p.clients?.name, p.city].filter(Boolean).join(' · ')}
+                {[p.clients?.name, p.city, p.contact_person, p.phone, p.email].filter(Boolean).join(' · ')}
               </p>
             </div>
             <ActiveToggle item={p} onToggle={() => toggleActive(p)} />
