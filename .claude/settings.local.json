@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(run)",
+      "Bash(nohup npm run dev)",
+      "Bash(echo \"PID:$!\")",
+      "Bash(rm -rf node_modules package-lock.json)",
+      "Bash(npm install *)",
+      "Bash(curl *)",
+      "Bash(python3 -c ' *)",
+      "mcp__claude_ai_Supabase__list_projects",
+      "mcp__claude_ai_Supabase__list_tables",
+      "Bash(node \"/private/tmp/claude-501/-Users-royrozentouler-Library-Application-Support-Claude-local-agent-mode-sessions-31aba549-c586-451b-b56c-61cc5ad3ea7d-3bed971a-0d19-452d-a043-07eafc758c81-local-c12ca748-eff7-43c6-90c5-248a9237ab25--7inf4z/2e903cbe-b3e3-47a7-86c9-24f56c9f97d6/scratchpad/gen_test_pdf.mjs\")",
+      "Bash(cp \"/private/tmp/claude-501/-Users-royrozentouler-Library-Application-Support-Claude-local-agent-mode-sessions-31aba549-c586-451b-b56c-61cc5ad3ea7d-3bed971a-0d19-452d-a043-07eafc758c81-local-c12ca748-eff7-43c6-90c5-248a9237ab25--7inf4z/2e903cbe-b3e3-47a7-86c9-24f56c9f97d6/scratchpad/gen_test_pdf.mjs\" \"/Users/royrozentouler/Library/Application Support/Claude/local-agent-mode-sessions/31aba549-c586-451b-b56c-61cc5ad3ea7d/3bed971a-0d19-452d-a043-07eafc758c81/local_c12ca748-eff7-43c6-90c5-248a9237ab25/outputs/enbar-app/scripts/gen_test_pdf.mjs\")",
+      "Bash(node scripts/gen_test_pdf.mjs)",
+      "Bash(qlmanage -t -s 1600 -o /tmp /tmp/test-extras.pdf)",
+      "Bash(node scripts/gen_test_pdf2.mjs)",
+      "Bash(qlmanage -t -s 1600 -o /tmp /tmp/test-extras2.pdf)",
+      "Bash(node scripts/gen_test_pdf3.mjs)",
+      "Bash(qlmanage -t -s 1600 -o /tmp /tmp/test-extras3.pdf)",
+      "Bash(node scripts/gen_test_pdf4.mjs)",
+      "Bash(qlmanage -t -s 1000 -o /tmp /tmp/test-extras4.pdf)",
+      "Bash(node scripts/gen_test_pdf5.mjs)",
+      "Bash(rm -f /tmp/test-extras5.pdf.png)",
+      "Bash(qlmanage -t -s 1000 -o /tmp /tmp/test-extras5.pdf)",
+      "Bash(node scripts/gen_test_pdf6.mjs)",
+      "Bash(rm -f /tmp/test-extras6.pdf.png)",
+      "Bash(qlmanage -t -s 1000 -o /tmp /tmp/test-extras6.pdf)",
+      "Bash(node scripts/gen_test_pdf7.mjs)",
+      "Bash(rm -f /tmp/test-extras7.pdf.png)",
+      "Bash(qlmanage -t -s 1200 -o /tmp /tmp/test-extras7.pdf)",
+      "mcp__claude_ai_Supabase__execute_sql",
+      "mcp__claude_ai_Supabase__apply_migration",
+      "Bash(npm run *)",
+      "Bash(pkill -f \"vite --port 5183\")",
+      "Bash(gh auth *)"
+    ]
+  }
+}
