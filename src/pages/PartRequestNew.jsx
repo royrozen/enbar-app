@@ -11,6 +11,8 @@ import {
   SearchIcon,
   XIcon,
   TrashIcon,
+  PencilIcon,
+  ChevronDownIcon,
 } from '../components/Icons'
 import { supabase, fetchActiveTeamLead, PART_PHOTO_BUCKET } from '../lib/supabase'
 
@@ -24,7 +26,12 @@ function makeLine() {
     catalogSearch: '',
     otherDescription: '',
     quantity: 1,
+    collapsed: false,
   }
+}
+
+function lineIsFilled(line) {
+  return line.useOther ? line.otherDescription.trim().length >= 5 : !!line.selectedItem
 }
 
 function loadDraft() {
@@ -34,7 +41,10 @@ function loadDraft() {
       clientId: d.clientId || '',
       projectId: d.projectId || '',
       notes: d.notes || '',
-      lines: Array.isArray(d.lines) && d.lines.length ? d.lines : [makeLine()],
+      lines:
+        Array.isArray(d.lines) && d.lines.length
+          ? d.lines.map((l) => ({ collapsed: false, ...l }))
+          : [makeLine()],
     }
   } catch {
     return { clientId: '', projectId: '', notes: '', lines: [makeLine()] }
@@ -127,11 +137,18 @@ export default function PartRequestNew() {
   }
 
   function addLine() {
-    setLines((ls) => [...ls, makeLine()])
+    setLines((ls) => [
+      ...ls.map((l) => (lineIsFilled(l) ? { ...l, collapsed: true } : l)),
+      makeLine(),
+    ])
   }
 
   function removeLine(key) {
     setLines((ls) => (ls.length > 1 ? ls.filter((l) => l.key !== key) : ls))
+  }
+
+  function toggleCollapse(key) {
+    setLines((ls) => ls.map((l) => (l.key === key ? { ...l, collapsed: !l.collapsed } : l)))
   }
 
   function stepQuantity(key, delta, current) {
@@ -169,7 +186,12 @@ export default function PartRequestNew() {
     setErrors(errs)
     setLineErrors(lErrs)
     if (Object.keys(errs).length || Object.keys(lErrs).length) {
-      document.querySelector('[data-error="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      if (Object.keys(lErrs).length) {
+        setLines((ls) => ls.map((l) => (lErrs[l.key] ? { ...l, collapsed: false } : l)))
+      }
+      setTimeout(() => {
+        document.querySelector('[data-error="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 0)
       return
     }
     if (!lead) {
@@ -179,6 +201,7 @@ export default function PartRequestNew() {
 
     setSubmitting(true)
     try {
+      const orderId = crypto.randomUUID()
       const insertedIds = []
       let failedLines = 0
       for (let i = 0; i < lines.length; i++) {
@@ -188,6 +211,7 @@ export default function PartRequestNew() {
           const { data: request, error } = await supabase
             .from('part_requests')
             .insert({
+              order_id: orderId,
               team_lead_id: lead.id,
               project_id: projectId,
               catalog_item_id: line.useOther ? null : line.selectedItem.id,
@@ -351,21 +375,71 @@ export default function PartRequestNew() {
                 return catalogItems.filter((i) => i.name.includes(q))
               })()
 
-              return (
-                <div key={line.key} className="card p-4 flex flex-col gap-3 border-border">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-primary">פריט {idx + 1}</span>
+              if (line.collapsed && lineIsFilled(line)) {
+                return (
+                  <div
+                    key={line.key}
+                    className="card p-3 flex items-center gap-3 border-border"
+                  >
+                    <span className="text-xs font-bold text-primary shrink-0">פריט {idx + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold truncate">
+                        {line.useOther ? line.otherDescription : line.selectedItem.name}
+                      </p>
+                      <p className="text-sm text-primary">כמות: {line.quantity}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => toggleCollapse(line.key)}
+                      aria-label="עריכת פריט"
+                      className="btn btn-outline !min-h-[40px] !px-3 shrink-0"
+                      disabled={submitting}
+                    >
+                      <PencilIcon size={16} />
+                    </button>
                     {lines.length > 1 && (
                       <button
                         type="button"
                         onClick={() => removeLine(line.key)}
                         aria-label="הסרת פריט"
-                        className="text-primary hover:text-destructive"
+                        className="text-primary hover:text-destructive shrink-0"
                         disabled={submitting}
                       >
                         <TrashIcon size={18} />
                       </button>
                     )}
+                  </div>
+                )
+              }
+
+              return (
+                <div key={line.key} className="card p-4 flex flex-col gap-3 border-border">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-primary">פריט {idx + 1}</span>
+                    <div className="flex items-center gap-3">
+                      {lineIsFilled(line) && (
+                        <button
+                          type="button"
+                          onClick={() => toggleCollapse(line.key)}
+                          aria-label="כיווץ פריט"
+                          className="text-primary hover:text-accent"
+                          disabled={submitting}
+                        >
+                          <ChevronDownIcon size={18} />
+                        </button>
+                      )}
+                      {lines.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeLine(line.key)}
+                          aria-label="הסרת פריט"
+                          className="text-primary hover:text-destructive"
+                          disabled={submitting}
+                        >
+                          <TrashIcon size={18} />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Catalog part or free-text "other" */}

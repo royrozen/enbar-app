@@ -5,3 +5,5 @@ dist-v*/
 .vercel/
 *.timestamp-*.mjs
 .DS_Store
+.vercel
+.env*

@@ -9,15 +9,21 @@ import {
   SpinnerIcon,
   ClipboardIcon,
   PackageIcon,
+  SearchIcon,
+  ChevronDownIcon,
 } from '../components/Icons'
 import { supabase, fetchActiveTeamLead } from '../lib/supabase'
-import { formatDate, PART_STATUS_LABELS } from '../lib/format'
+import { formatDate, PART_STATUS_LABELS, groupPartRequestsByOrder } from '../lib/format'
+
+const RECENT_ORDERS_LIMIT = 5
 
 export default function Home() {
   const [lead, setLead] = useState(null)
   const [reports, setReports] = useState(null)
   const [partRequests, setPartRequests] = useState(null)
   const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const [openOrders, setOpenOrders] = useState(() => new Set())
 
   useEffect(() => {
     let cancelled = false
@@ -42,7 +48,9 @@ export default function Home() {
             .limit(100),
           supabase
             .from('part_requests')
-            .select('id, quantity, status, created_at, projects(name), catalog_items(name), other_description')
+            .select(
+              'id, order_id, quantity, status, created_at, projects(name), catalog_items(name), other_description',
+            )
             .eq('team_lead_id', activeLead.id)
             .order('created_at', { ascending: false })
             .limit(100),
@@ -65,6 +73,24 @@ export default function Home() {
       cancelled = true
     }
   }, [])
+
+  const q = search.trim()
+  const visibleReports = !q
+    ? reports
+    : (reports || []).filter((r) =>
+        `${r.projects?.name || ''} ${formatDate(r.report_date)}`.includes(q),
+      )
+
+  const partOrders = groupPartRequestsByOrder(partRequests).slice(0, RECENT_ORDERS_LIMIT)
+
+  function toggleOrder(orderId) {
+    setOpenOrders((prev) => {
+      const next = new Set(prev)
+      if (next.has(orderId)) next.delete(orderId)
+      else next.add(orderId)
+      return next
+    })
+  }
 
   return (
     <div className="min-h-dvh">
@@ -110,8 +136,32 @@ export default function Home() {
           </div>
         )}
 
+        {reports !== null && reports.length > 0 && (
+          <div className="relative mb-3">
+            <SearchIcon
+              size={18}
+              className="absolute top-1/2 -translate-y-1/2 start-3 text-primary pointer-events-none"
+            />
+            <input
+              type="text"
+              className="input !ps-10"
+              placeholder="חיפוש דוח לפי פרויקט או תאריך..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        )}
+
+        {reports !== null && reports.length > 0 && visibleReports.length === 0 && (
+          <div className="card p-8 text-center text-primary">
+            <ClipboardIcon size={40} className="mx-auto mb-3 opacity-60" />
+            <p className="font-bold text-foreground">לא נמצאו דוחות</p>
+            <p className="text-sm mt-1">נסו חיפוש אחר</p>
+          </div>
+        )}
+
         <ul className="flex flex-col gap-3">
-          {(reports || []).map((r) => (
+          {(visibleReports || []).map((r) => (
             <li key={r.id}>
               <Link
                 to={`/report/${r.id}`}
@@ -155,28 +205,83 @@ export default function Home() {
           </div>
         )}
 
+        {partRequests !== null && partRequests.length > RECENT_ORDERS_LIMIT && (
+          <p className="text-sm text-primary mb-3">מציג את {RECENT_ORDERS_LIMIT} ההזמנות האחרונות</p>
+        )}
+
         <ul className="flex flex-col gap-3">
-          {(partRequests || []).map((r) => (
-            <li key={r.id}>
-              <Link
-                to={`/parts/${r.id}`}
-                className="card flex items-center gap-4 p-4 hover:border-accent transition-colors duration-200"
-              >
-                <div className="flex flex-col items-center justify-center bg-muted rounded-xl px-3 py-2 min-w-[72px]">
-                  <span className="text-sm font-black">{formatDate(r.created_at)}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold truncate">
-                    {r.catalog_items?.name || r.other_description}
-                  </p>
-                  <p className="text-sm text-primary flex items-center gap-2 mt-0.5">
-                    {r.projects?.name || 'פרויקט'} · כמות: {r.quantity}
-                  </p>
-                </div>
-                <StatusBadge status={r.status} labels={PART_STATUS_LABELS} />
-              </Link>
-            </li>
-          ))}
+          {partOrders.map((order) => {
+            const first = order.items[0]
+
+            if (order.items.length === 1) {
+              return (
+                <li key={order.orderId}>
+                  <Link
+                    to={`/parts/${first.id}`}
+                    className="card flex items-center gap-4 p-4 hover:border-accent transition-colors duration-200"
+                  >
+                    <div className="flex flex-col items-center justify-center bg-muted rounded-xl px-3 py-2 min-w-[72px]">
+                      <span className="text-sm font-black">{formatDate(order.createdAt)}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold truncate">
+                        {first.catalog_items?.name || first.other_description}
+                      </p>
+                      <p className="text-sm text-primary flex items-center gap-2 mt-0.5">
+                        {first.projects?.name || 'פרויקט'} · כמות: {first.quantity}
+                      </p>
+                    </div>
+                    <StatusBadge status={first.status} labels={PART_STATUS_LABELS} />
+                  </Link>
+                </li>
+              )
+            }
+
+            const isOpen = openOrders.has(order.orderId)
+            return (
+              <li key={order.orderId} className="card overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => toggleOrder(order.orderId)}
+                  aria-expanded={isOpen}
+                  className="w-full flex items-center gap-4 p-4 hover:bg-muted transition-colors duration-200 text-start"
+                >
+                  <div className="flex flex-col items-center justify-center bg-muted rounded-xl px-3 py-2 min-w-[72px]">
+                    <span className="text-sm font-black">{formatDate(order.createdAt)}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold truncate">{first.projects?.name || 'פרויקט'}</p>
+                    <p className="text-sm text-primary mt-0.5">{order.items.length} פריטים</p>
+                  </div>
+                  <ChevronDownIcon
+                    size={20}
+                    className={`text-primary shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                  />
+                </button>
+
+                {isOpen && (
+                  <ul className="border-t border-border divide-y divide-border">
+                    {order.items.map((r) => (
+                      <li key={r.id}>
+                        <Link
+                          to={`/parts/${r.id}`}
+                          className="flex items-center gap-3 p-3.5 ps-[92px] hover:bg-muted transition-colors duration-200"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">
+                              {r.catalog_items?.name || r.other_description}
+                            </p>
+                            <p className="text-sm text-primary mt-0.5">כמות: {r.quantity}</p>
+                          </div>
+                          <StatusBadge status={r.status} labels={PART_STATUS_LABELS} />
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            )
+          })}
         </ul>
       </main>
     </div>

@@ -128,6 +128,12 @@ export const PencilIcon = (p) => (
   </Icon>
 )
 
+export const ChevronDownIcon = (p) => (
+  <Icon {...p}>
+    <path d="m6 9 6 6 6-6" />
+  </Icon>
+)
+
 export const SendIcon = (p) => (
   <Icon {...p}>
     <path d="m22 2-7 20-4-9-9-4Z" />

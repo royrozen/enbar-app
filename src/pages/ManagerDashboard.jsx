@@ -10,6 +10,7 @@ import {
   UsersIcon,
   ClipboardIcon,
   PackageIcon,
+  SearchIcon,
 } from '../components/Icons'
 import { supabase, photoUrl } from '../lib/supabase'
 import { formatDate, todayISO, daysAgoISO } from '../lib/format'
@@ -26,6 +27,7 @@ export default function ManagerDashboard() {
   const [projects, setProjects] = useState([])
   const [leads, setLeads] = useState([])
   const [filters, setFilters] = useState(defaultFilters)
+  const [search, setSearch] = useState('')
   const [reports, setReports] = useState(null)
   const [stats, setStats] = useState({ today: null, pending: null, pendingParts: null })
   const [loading, setLoading] = useState(false)
@@ -109,6 +111,14 @@ export default function ManagerDashboard() {
     return sorted[0] ? photoUrl(sorted[0].storage_path) : null
   }
 
+  const q = search.trim()
+  const visibleReports = !q
+    ? reports
+    : (reports || []).filter((r) => {
+        const haystack = `${r.projects?.name || ''} ${r.team_leads?.name || ''} ${formatDate(r.report_date)}`
+        return haystack.includes(q)
+      })
+
   return (
     <div className="min-h-dvh">
       <Header />
@@ -171,8 +181,8 @@ export default function ManagerDashboard() {
         </div>
 
         {/* Filters */}
-        <div className="card mt-4 p-4 grid grid-cols-2 lg:grid-cols-5 gap-3 items-end">
-          <div className="col-span-2 lg:col-span-1">
+        <div className="card mt-4 p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+          <div className="sm:col-span-1">
             <label className="label !text-xs" htmlFor="f-project">פרויקט</label>
             <select
               id="f-project"
@@ -186,7 +196,7 @@ export default function ManagerDashboard() {
               ))}
             </select>
           </div>
-          <div className="col-span-2 lg:col-span-1">
+          <div className="sm:col-span-1">
             <label className="label !text-xs" htmlFor="f-lead">ראש צוות</label>
             <select
               id="f-lead"
@@ -200,30 +210,30 @@ export default function ManagerDashboard() {
               ))}
             </select>
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="label !text-xs" htmlFor="f-from">מתאריך</label>
             <input
               id="f-from"
               type="date"
-              className="input !min-h-[48px]"
+              className="input !min-h-[48px] w-full min-w-0"
               value={filters.from}
               disabled={filters.pendingOnly}
               onChange={(e) => setFilters((f) => ({ ...f, from: e.target.value }))}
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="label !text-xs" htmlFor="f-to">עד תאריך</label>
             <input
               id="f-to"
               type="date"
-              className="input !min-h-[48px]"
+              className="input !min-h-[48px] w-full min-w-0"
               value={filters.to}
               disabled={filters.pendingOnly}
               onChange={(e) => setFilters((f) => ({ ...f, to: e.target.value }))}
             />
           </div>
           <button
-            className="btn btn-ghost !min-h-[48px] col-span-2 lg:col-span-1"
+            className="btn btn-ghost !min-h-[48px] sm:col-span-2 lg:col-span-1"
             onClick={() => setFilters(defaultFilters())}
           >
             איפוס מסננים
@@ -242,20 +252,37 @@ export default function ManagerDashboard() {
           </div>
         )}
 
+        {/* Search */}
+        <div className="relative mt-4">
+          <SearchIcon
+            size={18}
+            className="absolute top-1/2 -translate-y-1/2 start-3 text-primary pointer-events-none"
+          />
+          <input
+            type="text"
+            className="input !ps-10"
+            placeholder="חיפוש דוח לפי פרויקט, ראש צוות או תאריך..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+
         {/* Reports list */}
         {reports === null ? (
           <div className="flex justify-center py-12 text-primary">
             <SpinnerIcon size={32} />
           </div>
-        ) : reports.length === 0 ? (
+        ) : visibleReports.length === 0 ? (
           <div className="card p-10 mt-4 text-center text-primary">
             <ClipboardIcon size={40} className="mx-auto mb-3 opacity-60" />
             <p className="font-bold text-foreground">לא נמצאו דוחות</p>
-            <p className="text-sm mt-1">נסו להרחיב את טווח התאריכים או לאפס את המסננים</p>
+            <p className="text-sm mt-1">
+              {q ? 'נסו חיפוש אחר' : 'נסו להרחיב את טווח התאריכים או לאפס את המסננים'}
+            </p>
           </div>
         ) : (
           <ul className="mt-4 flex flex-col gap-3">
-            {reports.map((r) => {
+            {visibleReports.map((r) => {
               const thumb = firstThumb(r)
               return (
                 <li key={r.id}>

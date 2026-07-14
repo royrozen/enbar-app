@@ -2,9 +2,15 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Header from '../components/Header'
 import StatusBadge from '../components/StatusBadge'
-import { ImageIcon, RefreshIcon, SpinnerIcon, PackageIcon } from '../components/Icons'
+import { ImageIcon, RefreshIcon, SpinnerIcon, PackageIcon, ChevronDownIcon } from '../components/Icons'
 import { supabase, partPhotoUrl } from '../lib/supabase'
-import { formatDate, todayISO, daysAgoISO, PART_STATUS_LABELS } from '../lib/format'
+import {
+  formatDate,
+  todayISO,
+  daysAgoISO,
+  PART_STATUS_LABELS,
+  groupPartRequestsByOrder,
+} from '../lib/format'
 
 const defaultFilters = () => ({
   status: '',
@@ -19,6 +25,16 @@ export default function ManagerParts() {
   const [requests, setRequests] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [openOrders, setOpenOrders] = useState(() => new Set())
+
+  function toggleOrder(orderId) {
+    setOpenOrders((prev) => {
+      const next = new Set(prev)
+      if (next.has(orderId)) next.delete(orderId)
+      else next.add(orderId)
+      return next
+    })
+  }
 
   const loadMeta = useCallback(async () => {
     const { data } = await supabase.from('projects').select('id, name').order('name')
@@ -32,7 +48,7 @@ export default function ManagerParts() {
       let q = supabase
         .from('part_requests')
         .select(
-          'id, quantity, status, created_at, photo_path, projects(name, clients(name)), team_leads(name), catalog_items(name), other_description',
+          'id, order_id, quantity, status, created_at, photo_path, projects(name, clients(name)), team_leads(name), catalog_items(name), other_description',
         )
         .order('created_at', { ascending: false })
         .limit(200)
@@ -63,6 +79,8 @@ export default function ManagerParts() {
     loadMeta()
     loadRequests()
   }
+
+  const orders = groupPartRequestsByOrder(requests)
 
   return (
     <div className="min-h-dvh">
@@ -153,41 +171,109 @@ export default function ManagerParts() {
           </div>
         ) : (
           <ul className="mt-4 flex flex-col gap-3">
-            {requests.map((r) => (
-              <li key={r.id}>
-                <Link
-                  to={`/manager/parts/${r.id}`}
-                  className="card flex items-center gap-4 p-3.5 hover:border-accent transition-colors duration-200"
-                >
-                  <div className="h-16 w-16 shrink-0 rounded-xl overflow-hidden bg-muted border border-border flex items-center justify-center text-primary">
-                    {r.photo_path ? (
-                      <img
-                        src={partPhotoUrl(r.photo_path)}
-                        alt=""
-                        loading="lazy"
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <ImageIcon size={24} className="opacity-50" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold truncate">
-                        {r.catalog_items?.name || r.other_description}
-                      </span>
-                      <span className="text-sm text-primary">{formatDate(r.created_at)}</span>
+            {orders.map((order) => {
+              const first = order.items[0]
+
+              if (order.items.length === 1) {
+                return (
+                  <li key={order.orderId}>
+                    <Link
+                      to={`/manager/parts/${first.id}`}
+                      className="card flex items-center gap-4 p-3.5 hover:border-accent transition-colors duration-200"
+                    >
+                      <div className="h-16 w-16 shrink-0 rounded-xl overflow-hidden bg-muted border border-border flex items-center justify-center text-primary">
+                        {first.photo_path ? (
+                          <img
+                            src={partPhotoUrl(first.photo_path)}
+                            alt=""
+                            loading="lazy"
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <ImageIcon size={24} className="opacity-50" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold truncate">
+                            {first.catalog_items?.name || first.other_description}
+                          </span>
+                          <span className="text-sm text-primary">{formatDate(first.created_at)}</span>
+                        </div>
+                        <p className="text-sm text-primary mt-1 flex items-center gap-3 flex-wrap">
+                          <span>{first.projects?.name}</span>
+                          <span>{first.team_leads?.name}</span>
+                          <span>כמות: {first.quantity}</span>
+                        </p>
+                      </div>
+                      <StatusBadge status={first.status} labels={PART_STATUS_LABELS} />
+                    </Link>
+                  </li>
+                )
+              }
+
+              const isOpen = openOrders.has(order.orderId)
+              return (
+                <li key={order.orderId} className="card overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => toggleOrder(order.orderId)}
+                    aria-expanded={isOpen}
+                    className="w-full flex items-center gap-4 p-3.5 hover:bg-muted transition-colors duration-200 text-start"
+                  >
+                    <div className="h-16 w-16 shrink-0 rounded-xl overflow-hidden bg-muted border border-border flex items-center justify-center text-primary">
+                      {first.photo_path ? (
+                        <img
+                          src={partPhotoUrl(first.photo_path)}
+                          alt=""
+                          loading="lazy"
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <PackageIcon size={24} className="opacity-50" />
+                      )}
                     </div>
-                    <p className="text-sm text-primary mt-1 flex items-center gap-3 flex-wrap">
-                      <span>{r.projects?.name}</span>
-                      <span>{r.team_leads?.name}</span>
-                      <span>כמות: {r.quantity}</span>
-                    </p>
-                  </div>
-                  <StatusBadge status={r.status} labels={PART_STATUS_LABELS} />
-                </Link>
-              </li>
-            ))}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold truncate">
+                          {order.items.length} פריטים
+                        </span>
+                        <span className="text-sm text-primary">{formatDate(order.createdAt)}</span>
+                      </div>
+                      <p className="text-sm text-primary mt-1 flex items-center gap-3 flex-wrap">
+                        <span>{first.projects?.name}</span>
+                        <span>{first.team_leads?.name}</span>
+                      </p>
+                    </div>
+                    <ChevronDownIcon
+                      size={20}
+                      className={`text-primary shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+
+                  {isOpen && (
+                    <ul className="border-t border-border divide-y divide-border">
+                      {order.items.map((r) => (
+                        <li key={r.id}>
+                          <Link
+                            to={`/manager/parts/${r.id}`}
+                            className="flex items-center gap-3 p-3.5 ps-[92px] hover:bg-muted transition-colors duration-200"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium truncate">
+                                {r.catalog_items?.name || r.other_description}
+                              </p>
+                              <p className="text-sm text-primary mt-0.5">כמות: {r.quantity}</p>
+                            </div>
+                            <StatusBadge status={r.status} labels={PART_STATUS_LABELS} />
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         )}
       </main>

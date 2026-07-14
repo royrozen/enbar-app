@@ -33,7 +33,10 @@
       "mcp__claude_ai_Supabase__apply_migration",
       "Bash(npm run *)",
       "Bash(pkill -f \"vite --port 5183\")",
-      "Bash(gh auth *)"
+      "Bash(gh auth *)",
+      "mcp__claude_ai_Vercel__list_deployments",
+      "Bash(git add *)",
+      "Bash(git status *)"
     ]
   }
 }
