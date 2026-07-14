@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Header from '../components/Header'
 import StatusBadge from '../components/StatusBadge'
+import StatusChips from '../components/StatusChips'
 import { ImageIcon, RefreshIcon, SpinnerIcon, PackageIcon, ChevronDownIcon } from '../components/Icons'
 import { supabase, partPhotoUrl } from '../lib/supabase'
 import {
@@ -18,6 +19,11 @@ const defaultFilters = () => ({
   from: daysAgoISO(6), // default: last 7 days
   to: todayISO(),
 })
+
+const PART_STATUS_CHIPS = [
+  { value: '', label: 'הכל' },
+  ...Object.entries(PART_STATUS_LABELS).map(([value, label]) => ({ value, label })),
+]
 
 export default function ManagerParts() {
   const [projects, setProjects] = useState([])
@@ -94,23 +100,18 @@ export default function ManagerParts() {
           </button>
         </div>
 
+        {/* Status filter */}
+        <div className="mt-4">
+          <StatusChips
+            value={filters.status}
+            onChange={(status) => setFilters((f) => ({ ...f, status }))}
+            options={PART_STATUS_CHIPS}
+          />
+        </div>
+
         {/* Filters */}
-        <div className="card mt-4 p-4 grid grid-cols-2 lg:grid-cols-5 gap-3 items-end">
-          <div>
-            <label className="label !text-xs" htmlFor="f-status">סטטוס</label>
-            <select
-              id="f-status"
-              className="input !min-h-[48px]"
-              value={filters.status}
-              onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
-            >
-              <option value="">כל הסטטוסים</option>
-              {Object.entries(PART_STATUS_LABELS).map(([key, label]) => (
-                <option key={key} value={key}>{label}</option>
-              ))}
-            </select>
-          </div>
-          <div className="col-span-2 lg:col-span-1">
+        <div className="card mt-3 p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+          <div className="sm:col-span-1">
             <label className="label !text-xs" htmlFor="f-project">פרויקט</label>
             <select
               id="f-project"
@@ -124,28 +125,28 @@ export default function ManagerParts() {
               ))}
             </select>
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="label !text-xs" htmlFor="f-from">מתאריך</label>
             <input
               id="f-from"
               type="date"
-              className="input !min-h-[48px]"
+              className="input !min-h-[48px] w-full min-w-0"
               value={filters.from}
               onChange={(e) => setFilters((f) => ({ ...f, from: e.target.value }))}
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="label !text-xs" htmlFor="f-to">עד תאריך</label>
             <input
               id="f-to"
               type="date"
-              className="input !min-h-[48px]"
+              className="input !min-h-[48px] w-full min-w-0"
               value={filters.to}
               onChange={(e) => setFilters((f) => ({ ...f, to: e.target.value }))}
             />
           </div>
           <button
-            className="btn btn-ghost !min-h-[48px] col-span-2 lg:col-span-1"
+            className="btn btn-ghost !min-h-[48px] sm:col-span-2 lg:col-span-1"
             onClick={() => setFilters(defaultFilters())}
           >
             איפוס מסננים

@@ -36,7 +36,8 @@
       "Bash(gh auth *)",
       "mcp__claude_ai_Vercel__list_deployments",
       "Bash(git add *)",
-      "Bash(git status *)"
+      "Bash(git status *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

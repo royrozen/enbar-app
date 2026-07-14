@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Header from '../components/Header'
 import StatusBadge from '../components/StatusBadge'
+import StatusChips from '../components/StatusChips'
 import {
   PlusIcon,
   ImageIcon,
@@ -15,7 +16,10 @@ import {
 import { supabase, fetchActiveTeamLead } from '../lib/supabase'
 import { formatDate, PART_STATUS_LABELS, groupPartRequestsByOrder } from '../lib/format'
 
-const RECENT_ORDERS_LIMIT = 5
+const PART_STATUS_CHIPS = [
+  { value: '', label: 'הכל' },
+  ...Object.entries(PART_STATUS_LABELS).map(([value, label]) => ({ value, label })),
+]
 
 export default function Home() {
   const [lead, setLead] = useState(null)
@@ -24,6 +28,7 @@ export default function Home() {
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [openOrders, setOpenOrders] = useState(() => new Set())
+  const [partStatus, setPartStatus] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -81,7 +86,10 @@ export default function Home() {
         `${r.projects?.name || ''} ${formatDate(r.report_date)}`.includes(q),
       )
 
-  const partOrders = groupPartRequestsByOrder(partRequests).slice(0, RECENT_ORDERS_LIMIT)
+  const filteredPartRequests = !partStatus
+    ? partRequests
+    : (partRequests || []).filter((r) => r.status === partStatus)
+  const partOrders = groupPartRequestsByOrder(filteredPartRequests)
 
   function toggleOrder(orderId) {
     setOpenOrders((prev) => {
@@ -205,8 +213,17 @@ export default function Home() {
           </div>
         )}
 
-        {partRequests !== null && partRequests.length > RECENT_ORDERS_LIMIT && (
-          <p className="text-sm text-primary mb-3">מציג את {RECENT_ORDERS_LIMIT} ההזמנות האחרונות</p>
+        {partRequests !== null && partRequests.length > 0 && (
+          <div className="mb-3">
+            <StatusChips value={partStatus} onChange={setPartStatus} options={PART_STATUS_CHIPS} />
+          </div>
+        )}
+
+        {partRequests !== null && partRequests.length > 0 && partOrders.length === 0 && (
+          <div className="card p-8 text-center text-primary">
+            <PackageIcon size={40} className="mx-auto mb-3 opacity-60" />
+            <p className="font-bold text-foreground">לא נמצאו בקשות בסטטוס זה</p>
+          </div>
         )}
 
         <ul className="flex flex-col gap-3">
