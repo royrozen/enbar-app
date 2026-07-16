@@ -38,7 +38,15 @@
       "Bash(git add *)",
       "Bash(git status *)",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(awk '/^## 4\\\\./{f=1} f{print} /^## 5\\\\./{exit}' \"enbar-app - PRD/enbar-spec.md\")",
+      "mcp__claude_ai_Supabase__get_cost",
+      "mcp__claude_ai_Supabase__confirm_cost",
+      "mcp__claude_ai_Supabase__create_project",
+      "mcp__claude_ai_Supabase__pause_project",
+      "mcp__claude_ai_Vercel__get_project",
+      "mcp__claude_ai_Supabase__get_project_url",
+      "mcp__claude_ai_Supabase__get_publishable_keys"
     ]
   }
 }
