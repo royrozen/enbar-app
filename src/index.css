@@ -113,6 +113,14 @@ body {
   .input[aria-invalid="true"] {
     border-color: var(--color-destructive);
   }
+  input[type="date"].input {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  input[type="date"].input::-webkit-date-and-time-value {
+    text-align: start;
+    width: 100%;
+  }
   textarea.input {
     min-height: 100px;
     resize: vertical;
