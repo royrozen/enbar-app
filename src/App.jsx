@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { getProfile } from './lib/profile'
 import ProfilePicker from './pages/ProfilePicker'
 import Home from './pages/Home'
+import History from './pages/History'
 import ReportNew from './pages/ReportNew'
 import ReportView from './pages/ReportView'
 import ManagerDashboard from './pages/ManagerDashboard'
@@ -85,6 +86,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<ProfilePicker />} />
       <Route path="/home" element={<RequireProfile><Home /></RequireProfile>} />
+      <Route path="/history" element={<RequireProfile><History /></RequireProfile>} />
       <Route path="/report/new" element={<RequireProfile><ReportNew /></RequireProfile>} />
       <Route path="/report/:id" element={<RequireProfile><ReportView /></RequireProfile>} />
       <Route path="/parts/new" element={<RequireProfile><PartRequestNew /></RequireProfile>} />

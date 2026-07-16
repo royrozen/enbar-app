@@ -4,21 +4,21 @@ import Header from '../components/Header'
 import StatusBadge from '../components/StatusBadge'
 import StatusChips from '../components/StatusChips'
 import {
-  PlusIcon,
   ImageIcon,
   AlertIcon,
   SpinnerIcon,
   ClipboardIcon,
   PackageIcon,
-  SearchIcon,
   ChevronDownIcon,
 } from '../components/Icons'
 import { supabase, fetchActiveTeamLead } from '../lib/supabase'
-import { formatDate, PART_STATUS_LABELS, groupPartRequestsByOrder } from '../lib/format'
+import { PART_STATUS_LABELS, groupPartRequestsByOrder, isToday } from '../lib/format'
 
-const PART_STATUS_CHIPS = [
+const TYPE_CHIPS = [
   { value: '', label: 'הכל' },
-  ...Object.entries(PART_STATUS_LABELS).map(([value, label]) => ({ value, label })),
+  { value: 'report', label: 'יומן עבודה' },
+  { value: 'part', label: 'הזמנת חלקים' },
+  { value: 'exception', label: 'יומן חריגים' },
 ]
 
 export default function Home() {
@@ -26,9 +26,8 @@ export default function Home() {
   const [reports, setReports] = useState(null)
   const [partRequests, setPartRequests] = useState(null)
   const [error, setError] = useState('')
-  const [search, setSearch] = useState('')
   const [openOrders, setOpenOrders] = useState(() => new Set())
-  const [partStatus, setPartStatus] = useState('')
+  const [typeFilter, setTypeFilter] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -67,7 +66,7 @@ export default function Home() {
         setPartRequests(parts || [])
       } catch {
         if (!cancelled) {
-          setError('טעינת הדוחות נכשלה — בדקו את חיבור האינטרנט ונסו שוב')
+          setError('טעינת הנתונים נכשלה — בדקו את חיבור האינטרנט ונסו שוב')
           setReports([])
           setPartRequests([])
         }
@@ -79,18 +78,6 @@ export default function Home() {
     }
   }, [])
 
-  const q = search.trim()
-  const visibleReports = !q
-    ? reports
-    : (reports || []).filter((r) =>
-        `${r.projects?.name || ''} ${formatDate(r.report_date)}`.includes(q),
-      )
-
-  const filteredPartRequests = !partStatus
-    ? partRequests
-    : (partRequests || []).filter((r) => r.status === partStatus)
-  const partOrders = groupPartRequestsByOrder(filteredPartRequests)
-
   function toggleOrder(orderId) {
     setOpenOrders((prev) => {
       const next = new Set(prev)
@@ -99,6 +86,20 @@ export default function Home() {
       return next
     })
   }
+
+  const loading = reports === null || partRequests === null
+
+  const todaysReports = (reports || []).filter((r) => isToday(r.created_at))
+  const todaysPartOrders = groupPartRequestsByOrder(
+    (partRequests || []).filter((r) => isToday(r.created_at)),
+  )
+
+  const unified = [
+    ...todaysReports.map((r) => ({ type: 'report', ts: r.created_at, report: r })),
+    ...todaysPartOrders.map((o) => ({ type: 'part', ts: o.createdAt, order: o })),
+  ].sort((a, b) => new Date(b.ts) - new Date(a.ts))
+
+  const visible = typeFilter ? unified.filter((u) => u.type === typeFilter) : unified
 
   return (
     <div className="min-h-dvh">
@@ -109,20 +110,38 @@ export default function Home() {
         </h1>
         <p className="text-primary mt-1">מה קרה היום בשטח?</p>
 
-        <Link
-          to="/report/new"
-          className="btn btn-accent w-full mt-5 !min-h-[64px] !text-xl !rounded-2xl shadow-md shadow-accent/30"
-        >
-          <PlusIcon size={26} />
-          דוח חדש
-        </Link>
+        {/* Workflow cards */}
+        <div className="mt-5 grid grid-cols-3 gap-3">
+          <Link
+            to="/report/new"
+            className="card p-4 flex flex-col items-center justify-center gap-2 text-center hover:border-accent transition-colors duration-200"
+          >
+            <ClipboardIcon size={26} className="text-accent" />
+            <span className="text-sm font-bold">יומן עבודה</span>
+          </Link>
+          <Link
+            to="/parts/new"
+            className="card p-4 flex flex-col items-center justify-center gap-2 text-center hover:border-accent transition-colors duration-200"
+          >
+            <PackageIcon size={26} className="text-accent" />
+            <span className="text-sm font-bold">הזמנת חלקים</span>
+          </Link>
+          <div className="card p-4 flex flex-col items-center justify-center gap-2 text-center opacity-50 relative">
+            <span className="absolute top-1.5 end-1.5 text-[10px] font-bold bg-muted text-primary rounded-full px-2 py-0.5">
+              בקרוב
+            </span>
+            <AlertIcon size={26} className="text-primary" />
+            <span className="text-sm font-bold">יומן חריגים</span>
+          </div>
+        </div>
 
-        <Link to="/parts/new" className="btn btn-outline w-full mt-3 !min-h-[52px]">
-          <PackageIcon size={22} />
-          הזמן חלק
-        </Link>
-
-        <h2 className="mt-8 mb-3 text-lg font-bold">הדוחות שלי</h2>
+        {/* Today's activity */}
+        <div className="mt-8 mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-bold">הפעילות שלי היום</h2>
+          <Link to="/history" className="btn btn-ghost text-sm">
+            דוחות ישנים
+          </Link>
+        </div>
 
         {error && (
           <div className="card border-destructive/40 bg-red-50 p-4 text-destructive font-medium">
@@ -130,115 +149,76 @@ export default function Home() {
           </div>
         )}
 
-        {reports === null && !error && (
+        {loading && !error && (
           <div className="flex justify-center py-10 text-primary">
             <SpinnerIcon size={32} />
           </div>
         )}
 
-        {reports !== null && reports.length === 0 && !error && (
+        {!loading && !error && unified.length === 0 && (
           <div className="card p-8 text-center text-primary">
             <ClipboardIcon size={40} className="mx-auto mb-3 opacity-60" />
-            <p className="font-bold text-foreground">עדיין אין דוחות</p>
-            <p className="text-sm mt-1">הדוח הראשון שתשלחו יופיע כאן</p>
+            <p className="font-bold text-foreground">עדיין לא דיווחתם היום</p>
           </div>
         )}
 
-        {reports !== null && reports.length > 0 && (
-          <div className="relative mb-3">
-            <SearchIcon
-              size={18}
-              className="absolute top-1/2 -translate-y-1/2 start-3 text-primary pointer-events-none"
-            />
-            <input
-              type="text"
-              className="input !ps-10"
-              placeholder="חיפוש דוח לפי פרויקט או תאריך..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-        )}
-
-        {reports !== null && reports.length > 0 && visibleReports.length === 0 && (
-          <div className="card p-8 text-center text-primary">
-            <ClipboardIcon size={40} className="mx-auto mb-3 opacity-60" />
-            <p className="font-bold text-foreground">לא נמצאו דוחות</p>
-            <p className="text-sm mt-1">נסו חיפוש אחר</p>
-          </div>
-        )}
-
-        <ul className="flex flex-col gap-3">
-          {(visibleReports || []).map((r) => (
-            <li key={r.id}>
-              <Link
-                to={`/report/${r.id}`}
-                className="card flex items-center gap-4 p-4 hover:border-accent transition-colors duration-200"
-              >
-                <div className="flex flex-col items-center justify-center bg-muted rounded-xl px-3 py-2 min-w-[72px]">
-                  <span className="text-sm font-black">{formatDate(r.report_date)}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold truncate">{r.projects?.name || 'פרויקט'}</p>
-                  <p className="text-sm text-primary flex items-center gap-2 mt-0.5">
-                    <ImageIcon size={15} />
-                    {r.report_photos?.length || 0} תמונות
-                    {r.issues && (
-                      <span className="inline-flex items-center gap-1 text-destructive font-medium">
-                        <AlertIcon size={15} />
-                        בעיה
-                      </span>
-                    )}
-                  </p>
-                </div>
-                <StatusBadge status={r.extras_status} />
-              </Link>
-            </li>
-          ))}
-        </ul>
-
-        <h2 className="mt-8 mb-3 text-lg font-bold">בקשות חלקים</h2>
-
-        {partRequests === null && !error && (
-          <div className="flex justify-center py-10 text-primary">
-            <SpinnerIcon size={32} />
-          </div>
-        )}
-
-        {partRequests !== null && partRequests.length === 0 && !error && (
-          <div className="card p-8 text-center text-primary">
-            <PackageIcon size={40} className="mx-auto mb-3 opacity-60" />
-            <p className="font-bold text-foreground">עדיין אין בקשות</p>
-            <p className="text-sm mt-1">הבקשה הראשונה שתשלחו תופיע כאן</p>
-          </div>
-        )}
-
-        {partRequests !== null && partRequests.length > 0 && (
+        {!loading && !error && unified.length > 0 && (
           <div className="mb-3">
-            <StatusChips value={partStatus} onChange={setPartStatus} options={PART_STATUS_CHIPS} />
+            <StatusChips value={typeFilter} onChange={setTypeFilter} options={TYPE_CHIPS} />
           </div>
         )}
 
-        {partRequests !== null && partRequests.length > 0 && partOrders.length === 0 && (
+        {!loading && !error && unified.length > 0 && visible.length === 0 && (
           <div className="card p-8 text-center text-primary">
-            <PackageIcon size={40} className="mx-auto mb-3 opacity-60" />
-            <p className="font-bold text-foreground">לא נמצאו בקשות בסטטוס זה</p>
+            <ClipboardIcon size={40} className="mx-auto mb-3 opacity-60" />
+            <p className="font-bold text-foreground">לא נמצאו רשומות מסוג זה היום</p>
           </div>
         )}
 
         <ul className="flex flex-col gap-3">
-          {partOrders.map((order) => {
+          {visible.map((item) => {
+            if (item.type === 'report') {
+              const r = item.report
+              return (
+                <li key={`report-${r.id}`}>
+                  <Link
+                    to={`/report/${r.id}`}
+                    className="card flex items-center gap-4 p-4 hover:border-accent transition-colors duration-200"
+                  >
+                    <div className="flex flex-col items-center justify-center bg-muted rounded-xl px-3 py-2 min-w-[72px]">
+                      <span className="text-sm font-black">היום</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold truncate">{r.projects?.name || 'פרויקט'}</p>
+                      <p className="text-sm text-primary flex items-center gap-2 mt-0.5">
+                        <ImageIcon size={15} />
+                        {r.report_photos?.length || 0} תמונות
+                        {r.issues && (
+                          <span className="inline-flex items-center gap-1 text-destructive font-medium">
+                            <AlertIcon size={15} />
+                            בעיה
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                    <StatusBadge status={r.extras_status} />
+                  </Link>
+                </li>
+              )
+            }
+
+            const order = item.order
             const first = order.items[0]
 
             if (order.items.length === 1) {
               return (
-                <li key={order.orderId}>
+                <li key={`part-${order.orderId}`}>
                   <Link
                     to={`/parts/${first.id}`}
                     className="card flex items-center gap-4 p-4 hover:border-accent transition-colors duration-200"
                   >
                     <div className="flex flex-col items-center justify-center bg-muted rounded-xl px-3 py-2 min-w-[72px]">
-                      <span className="text-sm font-black">{formatDate(order.createdAt)}</span>
+                      <span className="text-sm font-black">היום</span>
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-bold truncate">
@@ -256,7 +236,7 @@ export default function Home() {
 
             const isOpen = openOrders.has(order.orderId)
             return (
-              <li key={order.orderId} className="card overflow-hidden">
+              <li key={`part-${order.orderId}`} className="card overflow-hidden">
                 <button
                   type="button"
                   onClick={() => toggleOrder(order.orderId)}
@@ -264,7 +244,7 @@ export default function Home() {
                   className="w-full flex items-center gap-4 p-4 hover:bg-muted transition-colors duration-200 text-start"
                 >
                   <div className="flex flex-col items-center justify-center bg-muted rounded-xl px-3 py-2 min-w-[72px]">
-                    <span className="text-sm font-black">{formatDate(order.createdAt)}</span>
+                    <span className="text-sm font-black">היום</span>
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-bold truncate">{first.projects?.name || 'פרויקט'}</p>

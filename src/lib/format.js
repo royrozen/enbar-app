@@ -35,6 +35,13 @@ export function daysAgoISO(n) {
   return toISO(d)
 }
 
+// True when an ISO date or timestamp falls on the browser's local "today" —
+// used to gate edit access (D2: created_at-based, not report_date).
+export function isToday(isoDateOrTimestamp) {
+  if (!isoDateOrTimestamp) return false
+  return String(isoDateOrTimestamp).slice(0, 10) === todayISO()
+}
+
 // Groups part_requests rows submitted together (same order_id) into one
 // entry per order. Assumes rows are already sorted newest-first — that
 // order is preserved for the returned groups.
