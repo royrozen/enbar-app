@@ -35,8 +35,8 @@ export default function ManagerDashboard() {
 
   const loadMeta = useCallback(async () => {
     const [projRes, leadRes, todayRes, pendingRes, pendingPartsRes] = await Promise.all([
-      supabase.from('projects').select('id, name').order('name'),
-      supabase.from('team_leads').select('id, name').order('name'),
+      supabase.from('projects').select('id, name').is('deleted_at', null).order('name'),
+      supabase.from('team_leads').select('id, name').is('deleted_at', null).order('name'),
       supabase
         .from('reports')
         .select('id', { count: 'exact', head: true })

@@ -30,6 +30,7 @@ export async function fetchActiveTeamLead() {
     .from('team_leads')
     .select('*')
     .eq('is_active', true)
+    .is('deleted_at', null)
     .order('created_at', { ascending: true })
     .limit(1)
   if (error) throw error

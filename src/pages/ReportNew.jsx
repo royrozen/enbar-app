@@ -57,8 +57,9 @@ export default function ReportNew() {
         const [{ data: cls, error: cErr }, activeLead] = await Promise.all([
           supabase
             .from('clients')
-            .select('id, name, projects(id, name, city, is_active)')
+            .select('id, name, projects(id, name, city, is_active, deleted_at)')
             .eq('is_active', true)
+            .is('deleted_at', null)
             .order('name'),
           fetchActiveTeamLead(),
         ])
@@ -67,7 +68,7 @@ export default function ReportNew() {
         setClients(
           (cls || []).map((c) => ({
             ...c,
-            projects: (c.projects || []).filter((p) => p.is_active),
+            projects: (c.projects || []).filter((p) => p.is_active && !p.deleted_at),
           })),
         )
         setLead(activeLead)

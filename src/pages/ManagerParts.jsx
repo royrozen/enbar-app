@@ -43,7 +43,7 @@ export default function ManagerParts() {
   }
 
   const loadMeta = useCallback(async () => {
-    const { data } = await supabase.from('projects').select('id, name').order('name')
+    const { data } = await supabase.from('projects').select('id, name').is('deleted_at', null).order('name')
     setProjects(data || [])
   }, [])
 
