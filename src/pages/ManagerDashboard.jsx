@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Header from '../components/Header'
-import StatusBadge from '../components/StatusBadge'
 import {
   AlertIcon,
   ImageIcon,
@@ -20,7 +19,6 @@ const defaultFilters = () => ({
   leadId: '',
   from: daysAgoISO(6), // default: last 7 days
   to: todayISO(),
-  pendingOnly: false,
 })
 
 export default function ManagerDashboard() {
@@ -29,7 +27,7 @@ export default function ManagerDashboard() {
   const [filters, setFilters] = useState(defaultFilters)
   const [search, setSearch] = useState('')
   const [reports, setReports] = useState(null)
-  const [stats, setStats] = useState({ today: null, pending: null, pendingParts: null })
+  const [stats, setStats] = useState({ today: null, pendingExceptions: null, pendingParts: null })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -42,9 +40,9 @@ export default function ManagerDashboard() {
         .select('id', { count: 'exact', head: true })
         .eq('report_date', todayISO()),
       supabase
-        .from('reports')
+        .from('exception_logs')
         .select('id', { count: 'exact', head: true })
-        .eq('extras_status', 'pending'),
+        .neq('status', 'approved'),
       supabase
         .from('part_requests')
         .select('id', { count: 'exact', head: true })
@@ -54,7 +52,7 @@ export default function ManagerDashboard() {
     setLeads(leadRes.data || [])
     setStats({
       today: todayRes.count ?? 0,
-      pending: pendingRes.count ?? 0,
+      pendingExceptions: pendingRes.count ?? 0,
       pendingParts: pendingPartsRes.count ?? 0,
     })
   }, [])
@@ -66,20 +64,15 @@ export default function ManagerDashboard() {
       let q = supabase
         .from('reports')
         .select(
-          'id, report_date, workers_count, issues, extras_status, created_at, projects(name), team_leads(name), report_photos(id, storage_path, sort_order)',
+          'id, report_date, workers_count, issues, created_at, projects(name), team_leads(name), report_photos(id, storage_path, sort_order)',
         )
         .order('report_date', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(200)
       if (filters.projectId) q = q.eq('project_id', filters.projectId)
       if (filters.leadId) q = q.eq('team_lead_id', filters.leadId)
-      if (filters.pendingOnly) {
-        // Show every pending extra regardless of date range
-        q = q.eq('extras_status', 'pending')
-      } else {
-        if (filters.from) q = q.gte('report_date', filters.from)
-        if (filters.to) q = q.lte('report_date', filters.to)
-      }
+      if (filters.from) q = q.gte('report_date', filters.from)
+      if (filters.to) q = q.lte('report_date', filters.to)
       const { data, error: err } = await q
       if (err) throw err
       setReports(data || [])
@@ -144,29 +137,17 @@ export default function ManagerDashboard() {
               <p className="text-sm text-primary mt-1">דוחות היום</p>
             </div>
           </div>
-          <button
-            onClick={() =>
-              setFilters((f) => ({ ...f, pendingOnly: !f.pendingOnly }))
-            }
-            className={`card p-4 flex items-center gap-4 text-start transition-colors duration-200 ${
-              filters.pendingOnly
-                ? 'border-accent bg-muted ring-2 ring-accent/30'
-                : 'hover:border-accent'
-            }`}
-            aria-pressed={filters.pendingOnly}
-          >
+          <Link to="/manager/exceptions" className="card p-4 flex items-center gap-4 hover:border-accent transition-colors duration-200">
             <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-white">
               <AlertIcon size={24} />
             </span>
             <div>
               <p className="text-3xl font-black leading-none text-accent">
-                {stats.pending ?? '—'}
+                {stats.pendingExceptions ?? '—'}
               </p>
-              <p className="text-sm text-primary mt-1">
-                חריגות ממתינות לאישור {filters.pendingOnly ? '(מסונן)' : '— לחצו לסינון'}
-              </p>
+              <p className="text-sm text-primary mt-1">יומני חריגים ממתינים — לחצו לצפייה</p>
             </div>
-          </button>
+          </Link>
           <Link to="/manager/parts" className="card p-4 flex items-center gap-4 hover:border-accent transition-colors duration-200">
             <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-white">
               <PackageIcon size={24} />
@@ -217,7 +198,6 @@ export default function ManagerDashboard() {
               type="date"
               className="input !min-h-[48px] w-full min-w-0"
               value={filters.from}
-              disabled={filters.pendingOnly}
               onChange={(e) => setFilters((f) => ({ ...f, from: e.target.value }))}
             />
           </div>
@@ -228,7 +208,6 @@ export default function ManagerDashboard() {
               type="date"
               className="input !min-h-[48px] w-full min-w-0"
               value={filters.to}
-              disabled={filters.pendingOnly}
               onChange={(e) => setFilters((f) => ({ ...f, to: e.target.value }))}
             />
           </div>
@@ -239,12 +218,6 @@ export default function ManagerDashboard() {
             איפוס מסננים
           </button>
         </div>
-
-        {filters.pendingOnly && (
-          <p className="mt-3 text-sm text-accent font-bold">
-            מציג חריגות בסטטוס ״ממתין״ בלבד, מכל התאריכים
-          </p>
-        )}
 
         {error && (
           <div className="card border-destructive/40 bg-red-50 p-4 mt-4 text-destructive font-medium">
@@ -324,7 +297,6 @@ export default function ManagerDashboard() {
                           בעיה
                         </span>
                       )}
-                      <StatusBadge status={r.extras_status} />
                     </div>
                   </Link>
                 </li>

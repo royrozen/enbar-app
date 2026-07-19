@@ -8,12 +8,18 @@ import {
   CheckCircleIcon,
   SpinnerIcon,
   AlertIcon,
+  PencilIcon,
 } from '../components/Icons'
-import { supabase, fetchActiveTeamLead, PHOTO_BUCKET } from '../lib/supabase'
-import { todayISO } from '../lib/format'
+import { supabase, fetchActiveTeamLead, EXCEPTION_PHOTO_BUCKET } from '../lib/supabase'
 
-const DRAFT_KEY = 'enbar_report_draft'
+const DRAFT_KEY = 'enbar_exception_draft'
 const MAX_PHOTOS = 10
+
+export function autoBillableDays(workers, workDays) {
+  const w = Number(workers) || 0
+  const d = Number(workDays) || 0
+  return w * 0.5 * d
+}
 
 function loadDraft() {
   try {
@@ -23,7 +29,7 @@ function loadDraft() {
   }
 }
 
-export default function ReportNew() {
+export default function ExceptionNew() {
   const nav = useNavigate()
   const draft = useMemo(loadDraft, [])
 
@@ -33,12 +39,12 @@ export default function ReportNew() {
 
   const [clientId, setClientId] = useState(draft.clientId || '')
   const [projectId, setProjectId] = useState(draft.projectId || '')
-  const [date, setDate] = useState(draft.date && draft.date <= todayISO() ? draft.date : todayISO())
-  const [desc, setDesc] = useState(draft.desc || '')
   const [workers, setWorkers] = useState(draft.workers || 1)
-  const [issues, setIssues] = useState(draft.issues || '')
-  const [workPhotos, setWorkPhotos] = useState([])
-  const [issuePhotos, setIssuePhotos] = useState([])
+  const [workDays, setWorkDays] = useState(draft.workDays || 1)
+  const [desc, setDesc] = useState(draft.desc || '')
+  const [daysOverridden, setDaysOverridden] = useState(draft.daysOverridden || false)
+  const [manualDays, setManualDays] = useState(draft.manualDays ?? '')
+  const [photos, setPhotos] = useState([])
 
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
@@ -46,8 +52,7 @@ export default function ReportNew() {
   const [submitError, setSubmitError] = useState('')
   const [done, setDone] = useState(null)
 
-  const totalPhotos = workPhotos.length + issuePhotos.length
-  const remaining = MAX_PHOTOS - totalPhotos
+  const billableDays = daysOverridden ? manualDays : autoBillableDays(workers, workDays)
 
   useEffect(() => {
     let cancelled = false
@@ -88,8 +93,6 @@ export default function ReportNew() {
   const selectedClient = (clients || []).find((c) => c.id === clientId) || null
   const clientProjects = selectedClient?.projects || []
 
-  // A client with exactly one active project is resolved automatically; with
-  // more than one the team lead must pick which project the report is for.
   useEffect(() => {
     if (clientProjects.length === 1) {
       setProjectId(clientProjects[0].id)
@@ -104,26 +107,43 @@ export default function ReportNew() {
     if (done) return
     localStorage.setItem(
       DRAFT_KEY,
-      JSON.stringify({ clientId, projectId, date, desc, workers, issues }),
+      JSON.stringify({ clientId, projectId, workers, workDays, desc, daysOverridden, manualDays }),
     )
-  }, [clientId, projectId, date, desc, workers, issues, done])
+  }, [clientId, projectId, workers, workDays, desc, daysOverridden, manualDays, done])
+
+  function stepWorkers(delta) {
+    const w = Number(workers) || 0
+    setWorkers(Math.min(50, Math.max(1, w + delta)))
+  }
+
+  function stepWorkDays(delta) {
+    const d = Number(workDays) || 0
+    setWorkDays(Math.min(99, Math.max(1, d + delta)))
+  }
+
+  function startOverride() {
+    setManualDays(autoBillableDays(workers, workDays))
+    setDaysOverridden(true)
+  }
+
+  function resetToAuto() {
+    setDaysOverridden(false)
+    setManualDays('')
+  }
 
   function validate() {
     const errs = {}
     if (!clientId) errs.client = 'יש לבחור לקוח'
     else if (clientProjects.length === 0) errs.client = 'ללקוח זה אין פרויקט פעיל — פנו למנהל המפעל'
     else if (clientProjects.length > 1 && !projectId) errs.project = 'יש לבחור פרויקט עבור לקוח זה'
-    if (!date) errs.date = 'יש לבחור תאריך'
-    else if (date > todayISO()) errs.date = 'לא ניתן לדווח על תאריך עתידי'
-    if (desc.trim().length < 5) errs.desc = 'יש להזין תיאור עבודה של 5 תווים לפחות'
     const w = Number(workers)
     if (!Number.isInteger(w) || w < 1 || w > 50) errs.workers = 'מספר העובדים חייב להיות בין 1 ל־50'
+    const d = Number(workDays)
+    if (!Number.isInteger(d) || d < 1 || d > 99) errs.workDays = 'משך העבודה חייב להיות בין 1 ל־99 ימים'
+    if (desc.trim().length < 5) errs.desc = 'יש להזין תיאור עבודה של 5 תווים לפחות'
+    const b = Number(billableDays)
+    if (!Number.isFinite(b) || b < 0.5 || b > 999) errs.days = 'כמות הימים לחיוב חייבת להיות בין 0.5 ל־999'
     return errs
-  }
-
-  function stepWorkers(delta) {
-    const w = Number(workers) || 0
-    setWorkers(Math.min(50, Math.max(1, w + delta)))
   }
 
   async function submit(e) {
@@ -143,38 +163,34 @@ export default function ReportNew() {
 
     setSubmitting(true)
     try {
-      setProgress('שומר את הדוח...')
-      const { data: report, error } = await supabase
-        .from('reports')
+      setProgress('שומר את היומן...')
+      const { data: log, error } = await supabase
+        .from('exception_logs')
         .insert({
           team_lead_id: lead.id,
           project_id: projectId,
-          report_date: date,
-          work_description: desc.trim(),
           workers_count: Number(workers),
-          issues: issues.trim() || null,
+          work_days: Number(workDays),
+          work_description: desc.trim(),
+          billable_days: Number(billableDays),
+          days_overridden: daysOverridden,
         })
         .select()
         .single()
       if (error) throw error
 
-      const allPhotos = [
-        ...workPhotos.map((p) => ({ ...p, kind: 'work' })),
-        ...issuePhotos.map((p) => ({ ...p, kind: 'issue' })),
-      ]
       let failed = 0
-      for (let i = 0; i < allPhotos.length; i++) {
-        setProgress(`מעלה תמונה ${i + 1} מתוך ${allPhotos.length}...`)
-        const p = allPhotos[i]
+      for (let i = 0; i < photos.length; i++) {
+        setProgress(`מעלה תמונה ${i + 1} מתוך ${photos.length}...`)
         try {
-          const path = `reports/${report.id}/${crypto.randomUUID()}.jpg`
+          const path = `exceptions/${log.id}/${crypto.randomUUID()}.jpg`
           const { error: upErr } = await supabase.storage
-            .from(PHOTO_BUCKET)
-            .upload(path, p.file, { contentType: 'image/jpeg' })
+            .from(EXCEPTION_PHOTO_BUCKET)
+            .upload(path, photos[i].file, { contentType: 'image/jpeg' })
           if (upErr) throw upErr
           const { error: rowErr } = await supabase
-            .from('report_photos')
-            .insert({ report_id: report.id, storage_path: path, kind: p.kind, sort_order: i })
+            .from('exception_photos')
+            .insert({ exception_id: log.id, storage_path: path, sort_order: i })
           if (rowErr) throw rowErr
         } catch {
           failed++
@@ -182,10 +198,10 @@ export default function ReportNew() {
       }
 
       localStorage.removeItem(DRAFT_KEY)
-      setDone({ failed, total: allPhotos.length })
+      setDone({ id: log.id, failed, total: photos.length })
       window.scrollTo(0, 0)
     } catch {
-      setSubmitError('שליחת הדוח נכשלה — בדקו את חיבור האינטרנט ונסו שוב. מה שהקלדתם נשמר.')
+      setSubmitError('שמירת היומן נכשלה — בדקו את חיבור האינטרנט ונסו שוב. מה שהקלדתם נשמר.')
     } finally {
       setSubmitting(false)
       setProgress('')
@@ -198,20 +214,20 @@ export default function ReportNew() {
         <Header />
         <main className="mx-auto max-w-lg px-4 py-16 text-center">
           <CheckCircleIcon size={72} className="mx-auto text-success" />
-          <h1 className="mt-5 text-3xl font-black">הדוח נשלח ✓</h1>
-          <p className="mt-2 text-primary">הדוח מופיע כעת אצל המנהל</p>
+          <h1 className="mt-5 text-3xl font-black">היומן נשמר ✓</h1>
+          <p className="mt-2 text-primary">כעת ניתן להפיק את הדוח ולשלוח ללקוח לחתימה</p>
           {done.failed > 0 && (
             <p className="mt-4 card border-amber-300 bg-amber-50 p-3 text-amber-800 font-medium">
               שימו לב: {done.failed} מתוך {done.total} תמונות לא הועלו בגלל בעיית רשת
             </p>
           )}
           <div className="mt-10 flex flex-col gap-3">
-            <Link to="/home" className="btn btn-accent w-full !min-h-[56px]">
+            <Link to={`/exceptions/${done.id}`} className="btn btn-accent w-full !min-h-[56px]">
+              להפקת הדוח ושליחה ללקוח
+            </Link>
+            <Link to="/home" className="btn btn-outline w-full">
               חזרה למסך הראשי
             </Link>
-            <button className="btn btn-outline w-full" onClick={() => nav(0)}>
-              דוח חדש נוסף
-            </button>
           </div>
         </main>
       </div>
@@ -220,9 +236,9 @@ export default function ReportNew() {
 
   return (
     <div className="min-h-dvh pb-32">
-      <Header backTo="/home" title="דוח עבודה יומי" />
+      <Header backTo="/home" title="יומן חריגים" />
       <main className="mx-auto max-w-lg px-4 py-6">
-        <h1 className="text-2xl font-black mb-5 sm:hidden">דוח עבודה יומי</h1>
+        <h1 className="text-2xl font-black mb-5 sm:hidden">יומן חריגים</h1>
 
         {loadError && (
           <div className="card border-destructive/40 bg-red-50 p-4 mb-5 text-destructive font-medium flex items-start gap-2">
@@ -261,7 +277,7 @@ export default function ReportNew() {
             {errors.client && <p className="err">{errors.client}</p>}
           </div>
 
-          {/* 1b. Project — only shown when the client has more than one active project */}
+          {/* 1b. Project */}
           {clientProjects.length > 1 && (
             <div data-error={!!errors.project}>
               <label htmlFor="project" className="label">
@@ -287,46 +303,10 @@ export default function ReportNew() {
             </div>
           )}
 
-          {/* 2. Date */}
-          <div data-error={!!errors.date}>
-            <label htmlFor="date" className="label">
-              תאריך <span className="text-destructive">*</span>
-            </label>
-            <input
-              id="date"
-              type="date"
-              className="input"
-              value={date}
-              max={todayISO()}
-              onChange={(e) => setDate(e.target.value)}
-              aria-invalid={!!errors.date}
-              disabled={submitting}
-            />
-            {errors.date && <p className="err">{errors.date}</p>}
-          </div>
-
-          {/* 3. Work description */}
-          <div data-error={!!errors.desc}>
-            <label htmlFor="desc" className="label">
-              תיאור העבודה שבוצעה <span className="text-destructive">*</span>
-            </label>
-            <textarea
-              id="desc"
-              className="input"
-              rows={4}
-              placeholder="למשל: הותקנו 12 מטר תעלה בקומה 3, חיבור למפוח ראשי..."
-              value={desc}
-              onChange={(e) => setDesc(e.target.value)}
-              aria-invalid={!!errors.desc}
-              disabled={submitting}
-            />
-            {errors.desc && <p className="err">{errors.desc}</p>}
-          </div>
-
-          {/* 4. Workers count */}
+          {/* 2. Workers */}
           <div data-error={!!errors.workers}>
             <span className="label">
-              כמה עובדים היו באתר? <span className="text-destructive">*</span>
+              מספר עובדים <span className="text-destructive">*</span>
             </span>
             <div className="flex items-center gap-3">
               <button
@@ -363,41 +343,128 @@ export default function ReportNew() {
             {errors.workers && <p className="err">{errors.workers}</p>}
           </div>
 
-          {/* 5. Work photos */}
-          <PhotoUploader
-            label="תמונות מהשטח"
-            hint={`עד ${MAX_PHOTOS} תמונות בדוח (נשארו ${remaining}) — התמונות נדחסות אוטומטית`}
-            photos={workPhotos}
-            onChange={setWorkPhotos}
-            remaining={remaining}
-            disabled={submitting}
-          />
-
-          {/* 6. Issues + issue photos */}
-          <div className="card p-4 flex flex-col gap-4 border-amber-200">
-            <div>
-              <label htmlFor="issues" className="label">
-                בעיות שהתגלו באתר
-              </label>
-              <textarea
-                id="issues"
-                className="input"
-                rows={3}
-                placeholder="ריק = לא התגלו בעיות"
-                value={issues}
-                onChange={(e) => setIssues(e.target.value)}
+          {/* 3. Work duration */}
+          <div data-error={!!errors.workDays}>
+            <span className="label">
+              משך העבודה (ימים) <span className="text-destructive">*</span>
+            </span>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => stepWorkDays(-1)}
+                disabled={submitting || Number(workDays) <= 1}
+                aria-label="הפחתת יום"
+                className="btn btn-outline !min-h-[56px] !w-14 !px-0 !text-2xl shrink-0"
+              >
+                <MinusIcon size={26} />
+              </button>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={99}
+                className="input text-center !text-2xl font-black !min-h-[56px]"
+                value={workDays}
+                onChange={(e) => setWorkDays(e.target.value)}
+                aria-invalid={!!errors.workDays}
+                aria-label="משך העבודה בימים"
                 disabled={submitting}
               />
+              <button
+                type="button"
+                onClick={() => stepWorkDays(1)}
+                disabled={submitting || Number(workDays) >= 99}
+                aria-label="הוספת יום"
+                className="btn btn-outline !min-h-[56px] !w-14 !px-0 !text-2xl shrink-0"
+              >
+                <PlusIcon size={26} />
+              </button>
             </div>
-            <PhotoUploader
-              label="תמונות של הבעיות"
-              photos={issuePhotos}
-              onChange={setIssuePhotos}
-              remaining={remaining}
-              disabled={submitting}
-            />
+            {errors.workDays && <p className="err">{errors.workDays}</p>}
           </div>
 
+          {/* 4. Description */}
+          <div data-error={!!errors.desc}>
+            <label htmlFor="desc" className="label">
+              תיאור העבודה הנדרשת <span className="text-destructive">*</span>
+            </label>
+            <textarea
+              id="desc"
+              className="input"
+              rows={4}
+              placeholder="תיאור הפער בין מה שסוכם בחוזה לבין המצב בשטח והעבודה הנדרשת..."
+              value={desc}
+              onChange={(e) => setDesc(e.target.value)}
+              aria-invalid={!!errors.desc}
+              disabled={submitting}
+            />
+            {errors.desc && <p className="err">{errors.desc}</p>}
+          </div>
+
+          {/* 5. Billable days (calculated) */}
+          <div data-error={!!errors.days} className="card p-4 border-accent/40">
+            <div className="flex items-center justify-between gap-3">
+              <span className="label !mb-0">
+                כמות ימים לחיוב <span className="text-destructive">*</span>
+              </span>
+              {daysOverridden ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost text-sm !min-h-[36px]"
+                  onClick={resetToAuto}
+                  disabled={submitting}
+                >
+                  חישוב אוטומטי
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-ghost text-sm !min-h-[36px]"
+                  onClick={startOverride}
+                  disabled={submitting}
+                >
+                  <PencilIcon size={14} />
+                  עריכה ידנית
+                </button>
+              )}
+            </div>
+            {daysOverridden ? (
+              <>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={0.5}
+                  max={999}
+                  step={0.5}
+                  className="input text-center !text-2xl font-black !min-h-[56px] mt-2"
+                  value={manualDays}
+                  onChange={(e) => setManualDays(e.target.value)}
+                  aria-invalid={!!errors.days}
+                  aria-label="כמות ימים לחיוב"
+                  disabled={submitting}
+                />
+                <p className="mt-1.5 text-xs text-amber-800 font-medium">הוזן ידנית — הנוסחה האוטומטית מושבתת</p>
+              </>
+            ) : (
+              <>
+                <p className="text-3xl font-black text-accent mt-2 text-center">{billableDays}</p>
+                <p className="mt-1.5 text-xs text-primary text-center">
+                  חישוב אוטומטי: {workers} עובדים × חצי יום × {workDays} ימים
+                </p>
+              </>
+            )}
+            {errors.days && <p className="err">{errors.days}</p>}
+          </div>
+
+          {/* 6. Photos */}
+          <PhotoUploader
+            label="תמונות מהשטח"
+            hint={`עד ${MAX_PHOTOS} תמונות — נדחסות אוטומטית`}
+            photos={photos}
+            onChange={setPhotos}
+            remaining={MAX_PHOTOS - photos.length}
+            disabled={submitting}
+          />
         </form>
       </main>
 
@@ -416,10 +483,10 @@ export default function ReportNew() {
             {submitting ? (
               <>
                 <SpinnerIcon size={24} />
-                {progress || 'שולח...'}
+                {progress || 'שומר...'}
               </>
             ) : (
-              'שליחת הדוח'
+              'שמירת היומן'
             )}
           </button>
         </div>

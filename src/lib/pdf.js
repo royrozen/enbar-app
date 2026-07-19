@@ -52,12 +52,17 @@ function signatureField(label) {
   }
 }
 
-// report must include: report_date, extras_description, extras_edited,
+// exception must include: workers_count, work_days, billable_days,
+// days_overridden, work_description, created_at,
 // projects { name, city, contact_person, phone, email, clients { name } }
-export function generateExtrasPdf(report) {
-  const project = report.projects || {}
+// Returns a Promise<Blob> of the generated PDF (also triggers a download when
+// download=true) so callers can upload the same bytes to Storage for sharing.
+export function generateExceptionPdf(exception, { download = true } = {}) {
+  const project = exception.projects || {}
   const client = project.clients || {}
-  const extraText = (report.extras_edited || report.extras_description || '').trim()
+  const description = (exception.work_description || '').trim()
+  const days = Number(exception.billable_days)
+  const daysText = `${days % 1 === 0 ? days : days.toFixed(1)} ימי עבודה`
 
   const detailsBody = [
     detailRow('פרויקט', project.city ? `${project.name} — ${project.city}` : project.name),
@@ -69,13 +74,16 @@ export function generateExtrasPdf(report) {
     )
   }
   if (project.email) detailsBody.push(detailRow('דוא"ל', project.email))
-  detailsBody.push(detailRow('תאריך הדיווח', formatDate(report.report_date)))
+  detailsBody.push(detailRow('מספר עובדים', String(exception.workers_count)))
+  detailsBody.push(detailRow('משך העבודה', `${exception.work_days} ימים`))
+  detailsBody.push(detailRow('כמות ימים לחיוב', daysText))
+  detailsBody.push(detailRow('תאריך הדיווח', formatDate(exception.created_at)))
   detailsBody.push(detailRow('תאריך הפקת המסמך', formatDate(todayISO())))
 
   const dd = {
     pageSize: 'A4',
     pageMargins: [40, 36, 40, 50],
-    info: { title: 'אישור תוספת/חריגה — ענבר תעשיות פח' },
+    info: { title: 'דוח חריגים ותוספות — ענבר תעשיות פח' },
     defaultStyle: {
       font: 'Heebo',
       fontSize: 11,
@@ -110,14 +118,14 @@ export function generateExtrasPdf(report) {
         margin: [0, 12, 0, 20],
       },
       {
-        text: rtl('אישור תוספת / חריגה'),
+        text: rtl('דוח חריגים ותוספות'),
         fontSize: 17,
         bold: true,
         alignment: 'center',
         margin: [0, 0, 0, 4],
       },
       {
-        text: rtl('מסמך לאישור הלקוח — נא לחתום ולהחזיר'),
+        text: rtl('מסמך לאישור הלקוח — נא לחתום ולהחזיר. ללא חתימה העבודה לא תבוצע.'),
         fontSize: 9,
         color: GREY,
         alignment: 'center',
@@ -134,7 +142,7 @@ export function generateExtrasPdf(report) {
         },
       },
       {
-        text: rtl('תיאור התוספת / החריגה'),
+        text: rtl('תיאור העבודה הנדרשת'),
         bold: true,
         fontSize: 12,
         margin: [0, 22, 0, 8],
@@ -145,7 +153,7 @@ export function generateExtrasPdf(report) {
           body: [
             [
               {
-                text: rtlBlock(extraText || 'לא צוין', 78),
+                text: rtlBlock(description || 'לא צוין', 78),
                 margin: [12, 12, 12, 12],
                 lineHeight: 1.45,
               },
@@ -166,7 +174,7 @@ export function generateExtrasPdf(report) {
         margin: [0, 30, 0, 6],
       },
       {
-        text: rtl('אנו מאשרים את ביצוע התוספת/החריגה המפורטת במסמך זה, בתנאים שסוכמו.'),
+        text: rtl('אנו מאשרים את ביצוע העבודה המפורטת במסמך זה ואת חיוב ימי העבודה שצוינו.'),
         fontSize: 10,
         color: GREY,
         margin: [0, 0, 0, 28],
@@ -179,5 +187,7 @@ export function generateExtrasPdf(report) {
     ],
   }
 
-  pdfMake.createPdf(dd).download(`enbar-extra-${report.report_date}.pdf`)
+  const pdf = pdfMake.createPdf(dd)
+  if (download) pdf.download(`enbar-exception-${String(exception.created_at).slice(0, 10)}.pdf`)
+  return new Promise((resolve) => pdf.getBlob(resolve))
 }

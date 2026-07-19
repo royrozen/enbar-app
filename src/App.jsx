@@ -13,6 +13,9 @@ import PartRequestNew from './pages/PartRequestNew'
 import PartRequestView from './pages/PartRequestView'
 import ManagerParts from './pages/ManagerParts'
 import ManagerPartDetail from './pages/ManagerPartDetail'
+import ExceptionNew from './pages/ExceptionNew'
+import ExceptionView from './pages/ExceptionView'
+import ManagerExceptions from './pages/ManagerExceptions'
 
 // Phase-1 stopgap: a single shared password gates the admin area, since there
 // is no real auth yet (see CLAUDE.md). Not meant to withstand a determined
@@ -91,10 +94,14 @@ export default function App() {
       <Route path="/report/:id" element={<RequireProfile><ReportView /></RequireProfile>} />
       <Route path="/parts/new" element={<RequireProfile><PartRequestNew /></RequireProfile>} />
       <Route path="/parts/:id" element={<RequireProfile><PartRequestView /></RequireProfile>} />
+      <Route path="/exceptions/new" element={<RequireProfile><ExceptionNew /></RequireProfile>} />
+      <Route path="/exceptions/:id" element={<RequireProfile><ExceptionView backTo="/home" /></RequireProfile>} />
       <Route path="/manager" element={<RequireManager><ManagerDashboard /></RequireManager>} />
       <Route path="/manager/report/:id" element={<RequireManager><ManagerReport /></RequireManager>} />
       <Route path="/manager/parts" element={<RequireManager><ManagerParts /></RequireManager>} />
       <Route path="/manager/parts/:id" element={<RequireManager><ManagerPartDetail /></RequireManager>} />
+      <Route path="/manager/exceptions" element={<RequireManager><ManagerExceptions /></RequireManager>} />
+      <Route path="/manager/exceptions/:id" element={<RequireManager><ExceptionView backTo="/manager/exceptions" /></RequireManager>} />
       <Route path="/manager/settings" element={<RequireFactoryManager><ManagerSettings /></RequireFactoryManager>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

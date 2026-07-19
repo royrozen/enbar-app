@@ -25,6 +25,7 @@ export default function Home() {
   const [lead, setLead] = useState(null)
   const [reports, setReports] = useState(null)
   const [partRequests, setPartRequests] = useState(null)
+  const [exceptions, setExceptions] = useState(null)
   const [error, setError] = useState('')
   const [openOrders, setOpenOrders] = useState(() => new Set())
   const [typeFilter, setTypeFilter] = useState('')
@@ -39,36 +40,47 @@ export default function Home() {
           setError('לא נמצא ראש צוות פעיל במערכת — פנו למנהל המפעל')
           setReports([])
           setPartRequests([])
+          setExceptions([])
           return
         }
         setLead(activeLead)
-        const [{ data, error: err }, { data: parts, error: partsErr }] = await Promise.all([
-          supabase
-            .from('reports')
-            .select('id, report_date, workers_count, issues, extras_status, created_at, projects(name), report_photos(id)')
-            .eq('team_lead_id', activeLead.id)
-            .order('report_date', { ascending: false })
-            .order('created_at', { ascending: false })
-            .limit(100),
-          supabase
-            .from('part_requests')
-            .select(
-              'id, order_id, quantity, status, created_at, projects(name), catalog_items(name), other_description',
-            )
-            .eq('team_lead_id', activeLead.id)
-            .order('created_at', { ascending: false })
-            .limit(100),
-        ])
+        const [{ data, error: err }, { data: parts, error: partsErr }, { data: excs, error: excErr }] =
+          await Promise.all([
+            supabase
+              .from('reports')
+              .select('id, report_date, workers_count, issues, created_at, projects(name), report_photos(id)')
+              .eq('team_lead_id', activeLead.id)
+              .order('report_date', { ascending: false })
+              .order('created_at', { ascending: false })
+              .limit(100),
+            supabase
+              .from('part_requests')
+              .select(
+                'id, order_id, quantity, status, created_at, projects(name), catalog_items(name), other_description',
+              )
+              .eq('team_lead_id', activeLead.id)
+              .order('created_at', { ascending: false })
+              .limit(100),
+            supabase
+              .from('exception_logs')
+              .select('id, billable_days, days_overridden, status, created_at, projects(name)')
+              .eq('team_lead_id', activeLead.id)
+              .order('created_at', { ascending: false })
+              .limit(100),
+          ])
         if (cancelled) return
         if (err) throw err
         if (partsErr) throw partsErr
+        if (excErr) throw excErr
         setReports(data || [])
         setPartRequests(parts || [])
+        setExceptions(excs || [])
       } catch {
         if (!cancelled) {
           setError('טעינת הנתונים נכשלה — בדקו את חיבור האינטרנט ונסו שוב')
           setReports([])
           setPartRequests([])
+          setExceptions([])
         }
       }
     }
@@ -87,16 +99,18 @@ export default function Home() {
     })
   }
 
-  const loading = reports === null || partRequests === null
+  const loading = reports === null || partRequests === null || exceptions === null
 
   const todaysReports = (reports || []).filter((r) => isToday(r.created_at))
   const todaysPartOrders = groupPartRequestsByOrder(
     (partRequests || []).filter((r) => isToday(r.created_at)),
   )
+  const todaysExceptions = (exceptions || []).filter((e) => isToday(e.created_at))
 
   const unified = [
     ...todaysReports.map((r) => ({ type: 'report', ts: r.created_at, report: r })),
     ...todaysPartOrders.map((o) => ({ type: 'part', ts: o.createdAt, order: o })),
+    ...todaysExceptions.map((e) => ({ type: 'exception', ts: e.created_at, exception: e })),
   ].sort((a, b) => new Date(b.ts) - new Date(a.ts))
 
   const visible = typeFilter ? unified.filter((u) => u.type === typeFilter) : unified
@@ -126,13 +140,13 @@ export default function Home() {
             <PackageIcon size={26} className="text-accent" />
             <span className="text-sm font-bold">הזמנת חלקים</span>
           </Link>
-          <div className="card p-4 flex flex-col items-center justify-center gap-2 text-center opacity-50 relative">
-            <span className="absolute top-1.5 end-1.5 text-[10px] font-bold bg-muted text-primary rounded-full px-2 py-0.5">
-              בקרוב
-            </span>
-            <AlertIcon size={26} className="text-primary" />
+          <Link
+            to="/exceptions/new"
+            className="card p-4 flex flex-col items-center justify-center gap-2 text-center hover:border-accent transition-colors duration-200"
+          >
+            <AlertIcon size={26} className="text-accent" />
             <span className="text-sm font-bold">יומן חריגים</span>
-          </div>
+          </Link>
         </div>
 
         {/* Today's activity */}
@@ -201,7 +215,30 @@ export default function Home() {
                         )}
                       </p>
                     </div>
-                    <StatusBadge status={r.extras_status} />
+                  </Link>
+                </li>
+              )
+            }
+
+            if (item.type === 'exception') {
+              const ex = item.exception
+              const d = Number(ex.billable_days)
+              return (
+                <li key={`exception-${ex.id}`}>
+                  <Link
+                    to={`/exceptions/${ex.id}`}
+                    className="card flex items-center gap-4 p-4 hover:border-accent transition-colors duration-200"
+                  >
+                    <div className="flex flex-col items-center justify-center bg-muted rounded-xl px-3 py-2 min-w-[72px]">
+                      <span className="text-sm font-black">היום</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold truncate">{ex.projects?.name || 'פרויקט'}</p>
+                      <p className="text-sm text-primary mt-0.5">
+                        יומן חריגים · {d % 1 === 0 ? d : d.toFixed(1)} ימי חיוב
+                      </p>
+                    </div>
+                    <StatusBadge status={ex.status} />
                   </Link>
                 </li>
               )

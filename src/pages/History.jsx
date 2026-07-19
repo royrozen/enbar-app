@@ -33,6 +33,7 @@ export default function History() {
   const [filters, setFilters] = useState(defaultFilters)
   const [reports, setReports] = useState(null)
   const [partRequests, setPartRequests] = useState(null)
+  const [exceptions, setExceptions] = useState(null)
   const [openOrders, setOpenOrders] = useState(() => new Set())
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -54,7 +55,7 @@ export default function History() {
     try {
       let reportsQ = supabase
         .from('reports')
-        .select('id, report_date, workers_count, issues, extras_status, created_at, projects(name)')
+        .select('id, report_date, workers_count, issues, created_at, projects(name)')
         .eq('team_lead_id', activeLead.id)
         .order('report_date', { ascending: false })
         .order('created_at', { ascending: false })
@@ -73,15 +74,29 @@ export default function History() {
       if (filters.from) partsQ = partsQ.gte('created_at', filters.from)
       if (filters.to) partsQ = partsQ.lte('created_at', `${filters.to}T23:59:59`)
 
-      const [{ data: rpts, error: rErr }, { data: parts, error: pErr }] = await Promise.all([reportsQ, partsQ])
+      let excQ = supabase
+        .from('exception_logs')
+        .select('id, billable_days, days_overridden, status, created_at, projects(name)')
+        .eq('team_lead_id', activeLead.id)
+        .order('created_at', { ascending: false })
+        .limit(200)
+      if (filters.projectId) excQ = excQ.eq('project_id', filters.projectId)
+      if (filters.from) excQ = excQ.gte('created_at', filters.from)
+      if (filters.to) excQ = excQ.lte('created_at', `${filters.to}T23:59:59`)
+
+      const [{ data: rpts, error: rErr }, { data: parts, error: pErr }, { data: excs, error: eErr }] =
+        await Promise.all([reportsQ, partsQ, excQ])
       if (rErr) throw rErr
       if (pErr) throw pErr
+      if (eErr) throw eErr
       setReports(rpts || [])
       setPartRequests(parts || [])
+      setExceptions(excs || [])
     } catch {
       setError('טעינת הנתונים נכשלה — נסו לרענן')
       setReports([])
       setPartRequests([])
+      setExceptions([])
     } finally {
       setLoading(false)
     }
@@ -115,7 +130,10 @@ export default function History() {
   const reportItems = (reports || []).map((r) => ({ type: 'report', ts: r.report_date, report: r }))
   const partOrders = groupPartRequestsByOrder(partRequests)
   const partItems = partOrders.map((o) => ({ type: 'part', ts: o.createdAt, order: o }))
-  const unified = [...reportItems, ...partItems].sort((a, b) => new Date(b.ts) - new Date(a.ts))
+  const exceptionItems = (exceptions || []).map((e) => ({ type: 'exception', ts: e.created_at, exception: e }))
+  const unified = [...reportItems, ...partItems, ...exceptionItems].sort(
+    (a, b) => new Date(b.ts) - new Date(a.ts),
+  )
   const visible = filters.type ? unified.filter((u) => u.type === filters.type) : unified
 
   return (
@@ -215,7 +233,30 @@ export default function History() {
                           )}
                         </p>
                       </div>
-                      <StatusBadge status={r.extras_status} />
+                    </Link>
+                  </li>
+                )
+              }
+
+              if (item.type === 'exception') {
+                const ex = item.exception
+                const d = Number(ex.billable_days)
+                return (
+                  <li key={`exception-${ex.id}`}>
+                    <Link
+                      to={`/exceptions/${ex.id}`}
+                      className="card flex items-center gap-4 p-4 hover:border-accent transition-colors duration-200"
+                    >
+                      <div className="flex flex-col items-center justify-center bg-muted rounded-xl px-3 py-2 min-w-[72px]">
+                        <span className="text-sm font-black">{formatDate(ex.created_at)}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold truncate">{ex.projects?.name || 'פרויקט'}</p>
+                        <p className="text-sm text-primary mt-0.5">
+                          יומן חריגים · {d % 1 === 0 ? d : d.toFixed(1)} ימי חיוב
+                        </p>
+                      </div>
+                      <StatusBadge status={ex.status} />
                     </Link>
                   </li>
                 )

@@ -1,8 +1,7 @@
-export const STATUS_LABELS = {
+export const EXCEPTION_STATUS_LABELS = {
   pending: 'ממתין',
   sent: 'נשלח ללקוח',
-  approved: 'אושר',
-  rejected: 'נדחה',
+  approved: 'אושר ע"י הלקוח',
 }
 
 export const PART_STATUS_LABELS = {

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import Header from '../components/Header'
-import StatusBadge from '../components/StatusBadge'
 import PhotoGallery from '../components/PhotoGallery'
 import PhotoUploader from '../components/PhotoUploader'
 import {
@@ -28,7 +27,6 @@ export default function ReportView() {
   const [desc, setDesc] = useState('')
   const [workers, setWorkers] = useState(1)
   const [issues, setIssues] = useState('')
-  const [extras, setExtras] = useState('')
   const [newWorkPhotos, setNewWorkPhotos] = useState([])
   const [newIssuePhotos, setNewIssuePhotos] = useState([])
   const [errors, setErrors] = useState({})
@@ -61,7 +59,6 @@ export default function ReportView() {
     setDesc(report.work_description)
     setWorkers(report.workers_count)
     setIssues(report.issues || '')
-    setExtras(report.extras_description || '')
     setNewWorkPhotos([])
     setNewIssuePhotos([])
     setErrors({})
@@ -99,13 +96,10 @@ export default function ReportView() {
 
     setSaving(true)
     try {
-      const extrasText = extras.trim()
       const patch = {
         work_description: desc.trim(),
         workers_count: Number(workers),
         issues: issues.trim() || null,
-        extras_description: extrasText || null,
-        extras_status: extrasText ? report.extras_status || 'pending' : null,
       }
       const { error: updErr } = await supabase.from('reports').update(patch).eq('id', report.id)
       if (updErr) throw updErr
@@ -213,15 +207,6 @@ export default function ReportView() {
               )}
             </section>
 
-            {report.extras_description && (
-              <section className="card p-5 border-amber-200">
-                <h2 className="font-bold mb-2 flex items-center justify-between">
-                  תוספת / חריגה לאישור
-                  <StatusBadge status={report.extras_status} />
-                </h2>
-                <p className="whitespace-pre-wrap leading-relaxed">{report.extras_description}</p>
-              </section>
-            )}
           </div>
         )}
 
@@ -326,24 +311,6 @@ export default function ReportView() {
                 remaining={remaining}
                 disabled={saving}
               />
-            </div>
-
-            <div>
-              <label htmlFor="extras" className="label">
-                תוספת / חריגה לאישור
-              </label>
-              <textarea
-                id="extras"
-                className="input"
-                rows={3}
-                placeholder="עבודה מעבר להזמנה שדורשת אישור לקוח — למשל: פתח נוסף בקיר..."
-                value={extras}
-                onChange={(e) => setExtras(e.target.value)}
-                disabled={saving}
-              />
-              <p className="mt-1.5 text-xs text-primary">
-                אם מולא — התוספת תסומן כ״ממתין״ ותופיע למנהל לאישור מול הלקוח
-              </p>
             </div>
           </div>
         )}
