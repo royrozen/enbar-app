@@ -341,8 +341,9 @@ export default function PartRequestNew() {
             {errors.client && <p className="err">{errors.client}</p>}
           </div>
 
-          {/* 1b. Project — only shown when the client has more than one active project */}
-          {clientProjects.length > 1 && (
+          {/* 1b. Project — shown whenever the client has any active project
+              (auto-selected when there's exactly one, but still visible) */}
+          {clientProjects.length >= 1 && (
             <div data-error={!!errors.project}>
               <label htmlFor="project" className="label">
                 פרויקט <span className="text-destructive">*</span>
