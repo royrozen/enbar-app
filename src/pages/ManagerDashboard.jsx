@@ -32,13 +32,17 @@ export default function ManagerDashboard() {
   const [error, setError] = useState('')
 
   const loadMeta = useCallback(async () => {
+    // "Reports today" counts by submission time (created_at), not report_date —
+    // a backdated report filed today still came in today from the manager's view.
+    const startOfToday = new Date()
+    startOfToday.setHours(0, 0, 0, 0)
     const [projRes, leadRes, todayRes, pendingRes, pendingPartsRes] = await Promise.all([
       supabase.from('projects').select('id, name').is('deleted_at', null).order('name'),
       supabase.from('team_leads').select('id, name').is('deleted_at', null).order('name'),
       supabase
         .from('reports')
         .select('id', { count: 'exact', head: true })
-        .eq('report_date', todayISO()),
+        .gte('created_at', startOfToday.toISOString()),
       supabase
         .from('exception_logs')
         .select('id', { count: 'exact', head: true })
