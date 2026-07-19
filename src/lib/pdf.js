@@ -82,21 +82,36 @@ export async function generateExceptionPdf(exception, { download = false } = {})
   const days = Number(exception.billable_days)
   const daysText = `${days % 1 === 0 ? days : days.toFixed(1)} ימי עבודה`
 
+  // Header row: today's date on the left, logo on the right
+  const headerDate = {
+    text: formatDate(todayISO()),
+    fontSize: 10,
+    color: GREY,
+    alignment: 'left',
+    width: '*',
+    margin: [0, 6, 0, 0],
+  }
   let headerBlock
   try {
     const logo = await fetchLogoDataUrl()
-    headerBlock = { image: logo, width: 130, alignment: 'right' }
+    headerBlock = { columns: [headerDate, { image: logo, width: 130 }], columnGap: 10 }
   } catch {
     headerBlock = {
       columns: [
-        { svg: MARK_SVG, width: 40, margin: [0, 2, 0, 0] },
+        headerDate,
         {
-          width: '*',
-          stack: [
-            { text: rtl('ענבר תעשיות פח'), fontSize: 22, bold: true, color: NAVY },
-            { text: rtl('ייצור והתקנה של תעלות מיזוג אוויר'), fontSize: 10, color: GREY },
+          width: 'auto',
+          columns: [
+            { svg: MARK_SVG, width: 40, margin: [0, 2, 0, 0] },
+            {
+              stack: [
+                { text: rtl('ענבר תעשיות פח'), fontSize: 22, bold: true, color: NAVY },
+                { text: rtl('ייצור והתקנה של תעלות מיזוג אוויר'), fontSize: 10, color: GREY },
+              ],
+              alignment: 'right',
+            },
           ],
-          alignment: 'right',
+          columnGap: 10,
         },
       ],
       columnGap: 10,
@@ -129,11 +144,9 @@ export async function generateExceptionPdf(exception, { download = false } = {})
     )
   }
   if (project.email) detailsBody.push(detailRow('דוא"ל', project.email))
-  detailsBody.push(detailRow('מספר עובדים', String(exception.workers_count)))
   detailsBody.push(detailRow('משך העבודה', `${exception.work_days} ימים`))
-  detailsBody.push(detailRow('כמות ימים לחיוב', daysText))
+  detailsBody.push(detailRow('ימי עבודה לחיוב', daysText))
   detailsBody.push(detailRow('תאריך הדיווח', formatDate(exception.created_at)))
-  detailsBody.push(detailRow('תאריך הפקת המסמך', formatDate(todayISO())))
 
   const dd = {
     pageSize: 'A4',
