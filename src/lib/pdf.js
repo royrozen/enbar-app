@@ -2,6 +2,7 @@ import pdfMake from 'pdfmake/build/pdfmake'
 import { heeboRegular, heeboBold } from './heeboFonts'
 import { rtl, rtlBlock } from './rtl'
 import { formatDate, todayISO } from './format'
+import { LOGO_URL } from '../components/Logo'
 
 pdfMake.vfs = {
   'Heebo-Regular.ttf': heeboRegular,
@@ -22,13 +23,30 @@ const GREY = '#51637C'
 const DARK = '#16233D'
 const LIGHT = '#DCE3EC'
 
-// Brand mark (no text — text is drawn with the embedded Heebo font)
+// Fallback brand mark, used only if fetching the real logo PNG fails
 const MARK_SVG =
   '<svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">' +
   '<rect x="2" y="4" width="36" height="9" rx="2" fill="#14284D"/>' +
   '<rect x="8" y="16" width="30" height="9" rx="2" fill="#51637C"/>' +
   '<rect x="14" y="28" width="24" height="9" rx="2" fill="#AEBBCB"/>' +
   '</svg>'
+
+// The real company logo, fetched once and cached as a data URL. pdfmake can
+// only embed images as base64, and the logo lives on the website CDN.
+let logoDataUrl = null
+async function fetchLogoDataUrl() {
+  if (logoDataUrl) return logoDataUrl
+  const res = await fetch(LOGO_URL)
+  if (!res.ok) throw new Error('logo fetch failed')
+  const blob = await res.blob()
+  logoDataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+  return logoDataUrl
+}
 
 function detailRow(label, value) {
   return [
@@ -55,14 +73,51 @@ function signatureField(label) {
 // exception must include: workers_count, work_days, billable_days,
 // days_overridden, work_description, created_at,
 // projects { name, city, contact_person, phone, email, clients { name } }
-// Returns a Promise<Blob> of the generated PDF (also triggers a download when
-// download=true) so callers can upload the same bytes to Storage for sharing.
-export function generateExceptionPdf(exception, { download = true } = {}) {
+// Returns a Promise<Blob> of the generated PDF (no download by default —
+// callers upload the bytes to Storage and share/view via the public URL).
+export async function generateExceptionPdf(exception, { download = false } = {}) {
   const project = exception.projects || {}
   const client = project.clients || {}
   const description = (exception.work_description || '').trim()
   const days = Number(exception.billable_days)
   const daysText = `${days % 1 === 0 ? days : days.toFixed(1)} ימי עבודה`
+
+  let headerBlock
+  try {
+    const logo = await fetchLogoDataUrl()
+    headerBlock = { image: logo, width: 130, alignment: 'right' }
+  } catch {
+    headerBlock = {
+      columns: [
+        { svg: MARK_SVG, width: 40, margin: [0, 2, 0, 0] },
+        {
+          width: '*',
+          stack: [
+            { text: rtl('ענבר תעשיות פח'), fontSize: 22, bold: true, color: NAVY },
+            { text: rtl('ייצור והתקנה של תעלות מיזוג אוויר'), fontSize: 10, color: GREY },
+          ],
+          alignment: 'right',
+        },
+      ],
+      columnGap: 10,
+    }
+  }
+
+  // Single-page guarantee: only the description grows, so shrink its type as
+  // it gets longer instead of ever flowing to a second page. Wrap width
+  // (chars/line for rtlBlock) rises as the font shrinks.
+  let descFont = 11
+  let descWrap = 78
+  if (description.length > 2600) {
+    descFont = 8
+    descWrap = 110
+  } else if (description.length > 1600) {
+    descFont = 9
+    descWrap = 96
+  } else if (description.length > 900) {
+    descFont = 10
+    descWrap = 86
+  }
 
   const detailsBody = [
     detailRow('פרויקט', project.city ? `${project.name} — ${project.city}` : project.name),
@@ -99,20 +154,7 @@ export function generateExceptionPdf(exception, { download = true } = {}) {
       margin: [40, 14, 40, 0],
     }),
     content: [
-      {
-        columns: [
-          { svg: MARK_SVG, width: 40, margin: [0, 2, 0, 0] },
-          {
-            width: '*',
-            stack: [
-              { text: rtl('ענבר תעשיות פח'), fontSize: 22, bold: true, color: NAVY },
-              { text: rtl('ייצור והתקנה של תעלות מיזוג אוויר'), fontSize: 10, color: GREY },
-            ],
-            alignment: 'right',
-          },
-        ],
-        columnGap: 10,
-      },
+      headerBlock,
       {
         canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 2, lineColor: NAVY }],
         margin: [0, 12, 0, 20],
@@ -153,9 +195,10 @@ export function generateExceptionPdf(exception, { download = true } = {}) {
           body: [
             [
               {
-                text: rtlBlock(description || 'לא צוין', 78),
+                text: rtlBlock(description || 'לא צוין', descWrap),
+                fontSize: descFont,
                 margin: [12, 12, 12, 12],
-                lineHeight: 1.45,
+                lineHeight: 1.35,
               },
             ],
           ],

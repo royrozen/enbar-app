@@ -240,7 +240,7 @@ export default function ExceptionView({ backTo = '/home' }) {
   async function uploadSignedDoc(e) {
     const file = e.target.files?.[0]
     e.target.value = ''
-    if (!file || docUploading || locked) return
+    if (!file || docUploading || locked || !log.pdf_path) return
     setDocUploading(true)
     setDocError('')
     try {
@@ -420,11 +420,13 @@ export default function ExceptionView({ backTo = '/home' }) {
               )}
             </section>
 
-            {/* Signed form */}
-            <section className="card p-5">
+            {/* Signed form — disabled until a PDF has been generated at least once */}
+            <section className={`card p-5 ${!log.pdf_path && !log.signed_path ? 'opacity-60' : ''}`}>
               <h2 className="font-bold mb-1">המסמך החתום מהלקוח</h2>
               <p className="text-xs text-primary mb-3">
-                העלאת המסמך החתום מסמנת את היומן כ״אושר ע״י הלקוח״ ונועלת אותו
+                {log.pdf_path || log.signed_path
+                  ? 'העלאת המסמך החתום מסמנת את היומן כ״אושר ע״י הלקוח״ ונועלת אותו'
+                  : 'יש להפיק קודם את דוח החריגים — רק אחרי הפקה ושליחה ללקוח ניתן להעלות מסמך חתום'}
               </p>
               {log.signed_path ? (
                 <div className="flex items-center gap-3 flex-wrap">
@@ -439,7 +441,12 @@ export default function ExceptionView({ backTo = '/home' }) {
                   </a>
                 </div>
               ) : (
-                <label className={`btn btn-accent w-full sm:w-auto cursor-pointer ${locked ? 'opacity-50 pointer-events-none' : ''}`}>
+                <label
+                  className={`btn btn-accent w-full sm:w-auto cursor-pointer ${
+                    locked || !log.pdf_path ? 'opacity-50 pointer-events-none' : ''
+                  }`}
+                  title={!log.pdf_path ? 'יש להפיק קודם את דוח החריגים' : ''}
+                >
                   {docUploading ? <SpinnerIcon size={18} /> : <UploadIcon size={18} />}
                   העלאת המסמך החתום
                   <input
@@ -447,7 +454,7 @@ export default function ExceptionView({ backTo = '/home' }) {
                     accept="application/pdf,image/*"
                     className="hidden"
                     onChange={uploadSignedDoc}
-                    disabled={docUploading || locked}
+                    disabled={docUploading || locked || !log.pdf_path}
                   />
                 </label>
               )}
