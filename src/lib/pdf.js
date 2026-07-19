@@ -144,7 +144,6 @@ export async function generateExceptionPdf(exception, { download = false } = {})
     )
   }
   if (project.email) detailsBody.push(detailRow('דוא"ל', project.email))
-  detailsBody.push(detailRow('משך העבודה', `${exception.work_days} ימים`))
   detailsBody.push(detailRow('ימי עבודה לחיוב', daysText))
   detailsBody.push(detailRow('תאריך הדיווח', formatDate(exception.created_at)))
 
