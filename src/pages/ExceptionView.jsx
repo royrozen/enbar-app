@@ -206,7 +206,7 @@ export default function ExceptionView({ backTo = "/home" }) {
     setPdfError("");
     try {
       const { generateExceptionPdf } = await import("../lib/pdf");
-      const blob = await generateExceptionPdf(log, { download: true });
+      const blob = await generateExceptionPdf(log);
       const path = `exceptions/${log.id}/${crypto.randomUUID()}.pdf`;
       const { error: upErr } = await supabase.storage
         .from(EXCEPTION_DOC_BUCKET)
@@ -218,6 +218,10 @@ export default function ExceptionView({ backTo = "/home" }) {
         .eq("id", log.id);
       if (updErr) throw updErr;
       setLog((l) => ({ ...l, pdf_path: path }));
+      // Open last — on mobile Safari this can navigate the page away, so it
+      // must happen only once the upload/DB update already succeeded.
+      const url = supabase.storage.from(EXCEPTION_DOC_BUCKET).getPublicUrl(path).data.publicUrl;
+      window.open(url, "_blank");
     } catch {
       setPdfError("הפקת הדוח נכשלה — נסו שוב");
     } finally {

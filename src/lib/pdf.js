@@ -73,9 +73,13 @@ function signatureField(label) {
 // exception must include: workers_count, work_days, billable_days,
 // days_overridden, work_description, created_at,
 // projects { name, city, contact_person, phone, email, clients { name } }
-// Returns a Promise<Blob> of the generated PDF (no download by default —
-// callers upload the bytes to Storage and share/view via the public URL).
-export async function generateExceptionPdf(exception, { download = false } = {}) {
+// Returns a Promise<Blob> of the generated PDF. Never triggers a browser
+// download itself — pdfmake's own .download() can navigate the page away on
+// mobile Safari (it opens the blob in-place instead of saving it), which
+// would abort whatever the caller does next (e.g. uploading to Storage).
+// Callers should upload the blob first, then open its public URL if they
+// want the user to see/save it.
+export async function generateExceptionPdf(exception) {
   const project = exception.projects || {}
   const client = project.clients || {}
   const description = (exception.work_description || '').trim()
@@ -243,6 +247,5 @@ export async function generateExceptionPdf(exception, { download = false } = {})
   }
 
   const pdf = pdfMake.createPdf(dd)
-  if (download) pdf.download(`enbar-exception-${String(exception.created_at).slice(0, 10)}.pdf`)
   return new Promise((resolve) => pdf.getBlob(resolve))
 }
