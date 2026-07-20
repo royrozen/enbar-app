@@ -40,22 +40,3 @@ export function isToday(isoDateOrTimestamp) {
   if (!isoDateOrTimestamp) return false
   return String(isoDateOrTimestamp).slice(0, 10) === todayISO()
 }
-
-// Groups part_requests rows submitted together (same order_id) into one
-// entry per order. Assumes rows are already sorted newest-first — that
-// order is preserved for the returned groups.
-export function groupPartRequestsByOrder(rows) {
-  const groups = []
-  const byId = new Map()
-  for (const row of rows || []) {
-    const key = row.order_id || row.id
-    let group = byId.get(key)
-    if (!group) {
-      group = { orderId: key, createdAt: row.created_at, items: [] }
-      byId.set(key, group)
-      groups.push(group)
-    }
-    group.items.push(row)
-  }
-  return groups
-}

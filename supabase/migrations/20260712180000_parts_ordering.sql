@@ -1,7 +1,7 @@
 -- Direct Part Ordering from the Field (הזמנת חלקים חסרים מהשטח)
 -- See: enbar-app - PRD/enbar-parts-ordering-prd.md §4
 --
--- NOT YET APPLIED — review before running against the live `enbar-bot` project.
+-- NOT YET APPLIED — review before running against the live `enbar-Webapp-dev` project.
 -- Mirrors the conventions already live on reports/report_photos/report-photos:
 -- uuid PK via gen_random_uuid(), timestamptz created_at default now(),
 -- RLS enabled with permissive anon insert/select/update policies (no delete

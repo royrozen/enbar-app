@@ -1,6 +1,6 @@
 -- Exceptions Log (יומן חריגים) — see enbar-app - PRD/enbar-exceptions-log-prd.md
 --
--- NOT YET APPLIED — apply to BOTH enbar-bot (test) and enbar-prod.
+-- NOT YET APPLIED — apply to BOTH enbar-Webapp-dev (test) and enbar-prod.
 -- ⚠ The final ALTER TABLE is DESTRUCTIVE: it drops the in-report extras
 -- columns (§3e — the Exceptions Log fully replaces the extras workflow).
 -- Confirm before running.

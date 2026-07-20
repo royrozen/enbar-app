@@ -48,7 +48,7 @@ export default function ManagerDashboard() {
         .select('id', { count: 'exact', head: true })
         .neq('status', 'approved'),
       supabase
-        .from('part_requests')
+        .from('part_orders')
         .select('id', { count: 'exact', head: true })
         .eq('status', 'pending'),
     ])

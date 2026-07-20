@@ -3,15 +3,10 @@ import { Link } from 'react-router-dom'
 import Header from '../components/Header'
 import StatusBadge from '../components/StatusBadge'
 import StatusChips from '../components/StatusChips'
-import {
-  ImageIcon,
-  AlertIcon,
-  SpinnerIcon,
-  ClipboardIcon,
-  ChevronDownIcon,
-} from '../components/Icons'
+import PartOrderCard from '../components/PartOrderCard'
+import { ImageIcon, AlertIcon, SpinnerIcon, ClipboardIcon } from '../components/Icons'
 import { supabase, fetchActiveTeamLead } from '../lib/supabase'
-import { formatDate, todayISO, daysAgoISO, PART_STATUS_LABELS, groupPartRequestsByOrder } from '../lib/format'
+import { formatDate, todayISO, daysAgoISO } from '../lib/format'
 
 const TYPE_CHIPS = [
   { value: '', label: 'הכל' },
@@ -27,14 +22,16 @@ const defaultFilters = () => ({
   to: todayISO(),
 })
 
+const PART_ORDER_SELECT =
+  'id, status, status_updated_by, notes, created_at, projects(name, city, clients(name)), part_requests(id, quantity, catalog_item_id, other_description, catalog_items(name))'
+
 export default function History() {
   const [lead, setLead] = useState(null)
   const [projects, setProjects] = useState([])
   const [filters, setFilters] = useState(defaultFilters)
   const [reports, setReports] = useState(null)
-  const [partRequests, setPartRequests] = useState(null)
+  const [partOrders, setPartOrders] = useState(null)
   const [exceptions, setExceptions] = useState(null)
-  const [openOrders, setOpenOrders] = useState(() => new Set())
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -65,8 +62,8 @@ export default function History() {
       if (filters.to) reportsQ = reportsQ.lte('report_date', filters.to)
 
       let partsQ = supabase
-        .from('part_requests')
-        .select('id, order_id, quantity, status, created_at, projects(name), catalog_items(name), other_description')
+        .from('part_orders')
+        .select(PART_ORDER_SELECT)
         .eq('team_lead_id', activeLead.id)
         .order('created_at', { ascending: false })
         .limit(200)
@@ -84,18 +81,18 @@ export default function History() {
       if (filters.from) excQ = excQ.gte('created_at', filters.from)
       if (filters.to) excQ = excQ.lte('created_at', `${filters.to}T23:59:59`)
 
-      const [{ data: rpts, error: rErr }, { data: parts, error: pErr }, { data: excs, error: eErr }] =
+      const [{ data: rpts, error: rErr }, { data: orders, error: pErr }, { data: excs, error: eErr }] =
         await Promise.all([reportsQ, partsQ, excQ])
       if (rErr) throw rErr
       if (pErr) throw pErr
       if (eErr) throw eErr
       setReports(rpts || [])
-      setPartRequests(parts || [])
+      setPartOrders(orders || [])
       setExceptions(excs || [])
     } catch {
       setError('טעינת הנתונים נכשלה — נסו לרענן')
       setReports([])
-      setPartRequests([])
+      setPartOrders([])
       setExceptions([])
     } finally {
       setLoading(false)
@@ -118,18 +115,8 @@ export default function History() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters])
 
-  function toggleOrder(orderId) {
-    setOpenOrders((prev) => {
-      const next = new Set(prev)
-      if (next.has(orderId)) next.delete(orderId)
-      else next.add(orderId)
-      return next
-    })
-  }
-
   const reportItems = (reports || []).map((r) => ({ type: 'report', ts: r.report_date, report: r }))
-  const partOrders = groupPartRequestsByOrder(partRequests)
-  const partItems = partOrders.map((o) => ({ type: 'part', ts: o.createdAt, order: o }))
+  const partItems = (partOrders || []).map((o) => ({ type: 'part', ts: o.created_at, order: o }))
   const exceptionItems = (exceptions || []).map((e) => ({ type: 'exception', ts: e.created_at, exception: e }))
   const unified = [...reportItems, ...partItems, ...exceptionItems].sort(
     (a, b) => new Date(b.ts) - new Date(a.ts),
@@ -262,76 +249,12 @@ export default function History() {
                 )
               }
 
-              const order = item.order
-              const first = order.items[0]
-
-              if (order.items.length === 1) {
-                return (
-                  <li key={`part-${order.orderId}`}>
-                    <Link
-                      to={`/parts/${first.id}`}
-                      className="card flex items-center gap-4 p-4 hover:border-accent transition-colors duration-200"
-                    >
-                      <div className="flex flex-col items-center justify-center bg-muted rounded-xl px-3 py-2 min-w-[72px]">
-                        <span className="text-sm font-black">{formatDate(order.createdAt)}</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold truncate">
-                          {first.catalog_items?.name || first.other_description}
-                        </p>
-                        <p className="text-sm text-primary flex items-center gap-2 mt-0.5">
-                          {first.projects?.name || 'פרויקט'} · כמות: {first.quantity}
-                        </p>
-                      </div>
-                      <StatusBadge status={first.status} labels={PART_STATUS_LABELS} />
-                    </Link>
-                  </li>
-                )
-              }
-
-              const isOpen = openOrders.has(order.orderId)
               return (
-                <li key={`part-${order.orderId}`} className="card overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => toggleOrder(order.orderId)}
-                    aria-expanded={isOpen}
-                    className="w-full flex items-center gap-4 p-4 hover:bg-muted transition-colors duration-200 text-start"
-                  >
-                    <div className="flex flex-col items-center justify-center bg-muted rounded-xl px-3 py-2 min-w-[72px]">
-                      <span className="text-sm font-black">{formatDate(order.createdAt)}</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold truncate">{first.projects?.name || 'פרויקט'}</p>
-                      <p className="text-sm text-primary mt-0.5">{order.items.length} פריטים</p>
-                    </div>
-                    <ChevronDownIcon
-                      size={20}
-                      className={`text-primary shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                    />
-                  </button>
-
-                  {isOpen && (
-                    <ul className="border-t border-border divide-y divide-border">
-                      {order.items.map((r) => (
-                        <li key={r.id}>
-                          <Link
-                            to={`/parts/${r.id}`}
-                            className="flex items-center gap-3 p-3.5 ps-[92px] hover:bg-muted transition-colors duration-200"
-                          >
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium truncate">
-                                {r.catalog_items?.name || r.other_description}
-                              </p>
-                              <p className="text-sm text-primary mt-0.5">כמות: {r.quantity}</p>
-                            </div>
-                            <StatusBadge status={r.status} labels={PART_STATUS_LABELS} />
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </li>
+                <PartOrderCard
+                  key={`part-${item.order.id}`}
+                  order={item.order}
+                  onChanged={() => loadData(lead)}
+                />
               )
             })}
           </ul>

@@ -1,18 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Header from '../components/Header'
 import StatusBadge from '../components/StatusBadge'
 import StatusChips from '../components/StatusChips'
-import {
-  ImageIcon,
-  AlertIcon,
-  SpinnerIcon,
-  ClipboardIcon,
-  PackageIcon,
-  ChevronDownIcon,
-} from '../components/Icons'
+import PartOrderCard from '../components/PartOrderCard'
+import { ImageIcon, AlertIcon, SpinnerIcon, ClipboardIcon, PackageIcon } from '../components/Icons'
 import { supabase, fetchActiveTeamLead } from '../lib/supabase'
-import { PART_STATUS_LABELS, groupPartRequestsByOrder, isToday } from '../lib/format'
+import { isToday } from '../lib/format'
 
 const TYPE_CHIPS = [
   { value: '', label: 'הכל' },
@@ -21,95 +15,77 @@ const TYPE_CHIPS = [
   { value: 'exception', label: 'יומן חריגים' },
 ]
 
+const PART_ORDER_SELECT =
+  'id, status, status_updated_by, notes, created_at, projects(name, city, clients(name)), part_requests(id, quantity, catalog_item_id, other_description, catalog_items(name))'
+
 export default function Home() {
   const [lead, setLead] = useState(null)
   const [reports, setReports] = useState(null)
-  const [partRequests, setPartRequests] = useState(null)
+  const [partOrders, setPartOrders] = useState(null)
   const [exceptions, setExceptions] = useState(null)
   const [error, setError] = useState('')
-  const [openOrders, setOpenOrders] = useState(() => new Set())
   const [typeFilter, setTypeFilter] = useState('')
 
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      try {
-        const activeLead = await fetchActiveTeamLead()
-        if (cancelled) return
-        if (!activeLead) {
-          setError('לא נמצא ראש צוות פעיל במערכת — פנו למנהל המפעל')
-          setReports([])
-          setPartRequests([])
-          setExceptions([])
-          return
-        }
-        setLead(activeLead)
-        const [{ data, error: err }, { data: parts, error: partsErr }, { data: excs, error: excErr }] =
-          await Promise.all([
-            supabase
-              .from('reports')
-              .select('id, report_date, workers_count, issues, created_at, projects(name), report_photos(id)')
-              .eq('team_lead_id', activeLead.id)
-              .order('report_date', { ascending: false })
-              .order('created_at', { ascending: false })
-              .limit(100),
-            supabase
-              .from('part_requests')
-              .select(
-                'id, order_id, quantity, status, created_at, projects(name), catalog_items(name), other_description',
-              )
-              .eq('team_lead_id', activeLead.id)
-              .order('created_at', { ascending: false })
-              .limit(100),
-            supabase
-              .from('exception_logs')
-              .select('id, billable_days, days_overridden, status, created_at, projects(name)')
-              .eq('team_lead_id', activeLead.id)
-              .order('created_at', { ascending: false })
-              .limit(100),
-          ])
-        if (cancelled) return
-        if (err) throw err
-        if (partsErr) throw partsErr
-        if (excErr) throw excErr
-        setReports(data || [])
-        setPartRequests(parts || [])
-        setExceptions(excs || [])
-      } catch {
-        if (!cancelled) {
-          setError('טעינת הנתונים נכשלה — בדקו את חיבור האינטרנט ונסו שוב')
-          setReports([])
-          setPartRequests([])
-          setExceptions([])
-        }
+  const load = useCallback(async () => {
+    try {
+      const activeLead = await fetchActiveTeamLead()
+      if (!activeLead) {
+        setError('לא נמצא ראש צוות פעיל במערכת — פנו למנהל המפעל')
+        setReports([])
+        setPartOrders([])
+        setExceptions([])
+        return
       }
-    }
-    load()
-    return () => {
-      cancelled = true
+      setLead(activeLead)
+      const [{ data, error: err }, { data: orders, error: ordersErr }, { data: excs, error: excErr }] =
+        await Promise.all([
+          supabase
+            .from('reports')
+            .select('id, report_date, workers_count, issues, created_at, projects(name), report_photos(id)')
+            .eq('team_lead_id', activeLead.id)
+            .order('report_date', { ascending: false })
+            .order('created_at', { ascending: false })
+            .limit(100),
+          supabase
+            .from('part_orders')
+            .select(PART_ORDER_SELECT)
+            .eq('team_lead_id', activeLead.id)
+            .order('created_at', { ascending: false })
+            .limit(100),
+          supabase
+            .from('exception_logs')
+            .select('id, billable_days, days_overridden, status, created_at, projects(name)')
+            .eq('team_lead_id', activeLead.id)
+            .order('created_at', { ascending: false })
+            .limit(100),
+        ])
+      if (err) throw err
+      if (ordersErr) throw ordersErr
+      if (excErr) throw excErr
+      setReports(data || [])
+      setPartOrders(orders || [])
+      setExceptions(excs || [])
+    } catch {
+      setError('טעינת הנתונים נכשלה — בדקו את חיבור האינטרנט ונסו שוב')
+      setReports([])
+      setPartOrders([])
+      setExceptions([])
     }
   }, [])
 
-  function toggleOrder(orderId) {
-    setOpenOrders((prev) => {
-      const next = new Set(prev)
-      if (next.has(orderId)) next.delete(orderId)
-      else next.add(orderId)
-      return next
-    })
-  }
+  useEffect(() => {
+    load()
+  }, [load])
 
-  const loading = reports === null || partRequests === null || exceptions === null
+  const loading = reports === null || partOrders === null || exceptions === null
 
   const todaysReports = (reports || []).filter((r) => isToday(r.created_at))
-  const todaysPartOrders = groupPartRequestsByOrder(
-    (partRequests || []).filter((r) => isToday(r.created_at)),
-  )
+  const todaysPartOrders = (partOrders || []).filter((o) => isToday(o.created_at))
   const todaysExceptions = (exceptions || []).filter((e) => isToday(e.created_at))
 
   const unified = [
     ...todaysReports.map((r) => ({ type: 'report', ts: r.created_at, report: r })),
-    ...todaysPartOrders.map((o) => ({ type: 'part', ts: o.createdAt, order: o })),
+    ...todaysPartOrders.map((o) => ({ type: 'part', ts: o.created_at, order: o })),
     ...todaysExceptions.map((e) => ({ type: 'exception', ts: e.created_at, exception: e })),
   ].sort((a, b) => new Date(b.ts) - new Date(a.ts))
 
@@ -244,77 +220,7 @@ export default function Home() {
               )
             }
 
-            const order = item.order
-            const first = order.items[0]
-
-            if (order.items.length === 1) {
-              return (
-                <li key={`part-${order.orderId}`}>
-                  <Link
-                    to={`/parts/${first.id}`}
-                    className="card flex items-center gap-4 p-4 hover:border-accent transition-colors duration-200"
-                  >
-                    <div className="flex flex-col items-center justify-center bg-muted rounded-xl px-3 py-2 min-w-[72px]">
-                      <span className="text-sm font-black">היום</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold truncate">
-                        {first.catalog_items?.name || first.other_description}
-                      </p>
-                      <p className="text-sm text-primary flex items-center gap-2 mt-0.5">
-                        {first.projects?.name || 'פרויקט'} · כמות: {first.quantity}
-                      </p>
-                    </div>
-                    <StatusBadge status={first.status} labels={PART_STATUS_LABELS} />
-                  </Link>
-                </li>
-              )
-            }
-
-            const isOpen = openOrders.has(order.orderId)
-            return (
-              <li key={`part-${order.orderId}`} className="card overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => toggleOrder(order.orderId)}
-                  aria-expanded={isOpen}
-                  className="w-full flex items-center gap-4 p-4 hover:bg-muted transition-colors duration-200 text-start"
-                >
-                  <div className="flex flex-col items-center justify-center bg-muted rounded-xl px-3 py-2 min-w-[72px]">
-                    <span className="text-sm font-black">היום</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold truncate">{first.projects?.name || 'פרויקט'}</p>
-                    <p className="text-sm text-primary mt-0.5">{order.items.length} פריטים</p>
-                  </div>
-                  <ChevronDownIcon
-                    size={20}
-                    className={`text-primary shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                  />
-                </button>
-
-                {isOpen && (
-                  <ul className="border-t border-border divide-y divide-border">
-                    {order.items.map((r) => (
-                      <li key={r.id}>
-                        <Link
-                          to={`/parts/${r.id}`}
-                          className="flex items-center gap-3 p-3.5 ps-[92px] hover:bg-muted transition-colors duration-200"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium truncate">
-                              {r.catalog_items?.name || r.other_description}
-                            </p>
-                            <p className="text-sm text-primary mt-0.5">כמות: {r.quantity}</p>
-                          </div>
-                          <StatusBadge status={r.status} labels={PART_STATUS_LABELS} />
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </li>
-            )
+            return <PartOrderCard key={`part-${item.order.id}`} order={item.order} onChanged={load} />
           })}
         </ul>
       </main>

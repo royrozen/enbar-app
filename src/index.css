@@ -160,3 +160,27 @@ body {
     transform: rotate(360deg);
   }
 }
+
+/* Part-order A4 print sheet: everything else on the page is hidden while
+   printing, only .print-sheet is shown, full width, own page box. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-sheet,
+  .print-sheet * {
+    visibility: visible;
+  }
+  .print-sheet {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+  }
+  .no-print {
+    display: none !important;
+  }
+  @page {
+    size: A4 portrait;
+    margin: 15mm;
+  }
+}

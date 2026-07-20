@@ -1,7 +1,7 @@
 -- Admin settings redesign (see enbar-app - PRD/enbar-admin-redesign-prd.md)
 --
 -- NOT YET APPLIED — review before running against live projects, and apply to
--- BOTH enbar-bot (test) and enbar-prod when approved.
+-- BOTH enbar-Webapp-dev (test) and enbar-prod when approved.
 --
 -- 1. ח.פ (company registration number) on clients — optional free text (D4).
 -- 2. Soft delete, distinct from is_active deactivation (D2): deleted_at IS NULL

@@ -1,4 +1,4 @@
--- Base schema — reconstructed from the live enbar-bot project so a second
+-- Base schema — reconstructed from the live enbar-Webapp-dev project so a second
 -- (production) Supabase project can be bootstrapped from a clean migration
 -- history. This predates the migrations below it and must run first.
 --
