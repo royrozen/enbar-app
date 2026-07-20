@@ -403,11 +403,6 @@ export default function ExceptionView({ backTo = "/home" }) {
                   עדכון אחרון על ידי: {log.status_updated_by}
                 </p>
               )}
-              {locked && (
-                <p className="mt-3 card border-green-300 bg-green-50 p-3 text-green-800 text-sm font-bold">
-                  היומן נעול — אושר ע״י הלקוח
-                </p>
-              )}
             </div>
 
             {/* Description + photos */}
