@@ -243,6 +243,18 @@ export default function ExceptionView({ backTo = "/home" }) {
     setStatus("sent");
   }
 
+  function shareSignedDocWhatsApp() {
+    const url = signedDocUrl(log.signed_path);
+    const text = encodeURIComponent(
+      `שלום, מצורף המסמך החתום לאישור חריגים ותוספות מענבר תעשיות פח:\n${url}`,
+    );
+    const phone = sharePhone.replace(/[^\d]/g, "").replace(/^0/, "972");
+    const wa = phone
+      ? `https://wa.me/${phone}?text=${text}`
+      : `https://wa.me/?text=${text}`;
+    window.open(wa, "_blank");
+  }
+
   function exceptionDocPublicUrl() {
     return supabase.storage
       .from(EXCEPTION_DOC_BUCKET)
@@ -432,8 +444,10 @@ export default function ExceptionView({ backTo = "/home" }) {
               )}
             </section>
 
-            {/* PDF + WhatsApp */}
-            <section className="card p-5">
+            {/* PDF + WhatsApp — disabled once the client's signed doc is in */}
+            <section
+              className={`card p-5 ${locked ? "opacity-50 pointer-events-none" : ""}`}
+            >
               <h2 className="font-bold mb-3">דוח לאישור הלקוח</h2>
               <div className="flex gap-2 flex-wrap">
                 <button
@@ -537,6 +551,16 @@ export default function ExceptionView({ backTo = "/home" }) {
                     <FileTextIcon size={18} />
                     צפייה במסמך החתום
                   </a>
+                  {log.status === "approved" && (
+                    <button
+                      type="button"
+                      className="btn btn-success"
+                      onClick={shareSignedDocWhatsApp}
+                    >
+                      <SendIcon size={16} />
+                      שליחה בוואטסאפ
+                    </button>
+                  )}
                 </div>
               ) : (
                 <label
