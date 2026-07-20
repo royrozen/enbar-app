@@ -51,37 +51,35 @@ async function fetchLogoDataUrl() {
 const CONTENT_WIDTH = 515 // page width 595.28 minus the 40+40 side margins
 const FIELD_LABEL_W = 100
 
-// One field: value and its "label:" caption side by side on the SAME row
-// (label rightmost, like every other RTL row in this file), with a thin
-// rule directly under that row via a 1x1 table's bottom border. blank:true
-// omits the value (and its '—' placeholder) for fields the client fills in
-// by hand/signature rather than ones pre-filled from data.
+// One field: value and its "label:" caption side by side on the SAME row —
+// but they're two independent columns, each with its OWN table/border, so
+// the underline belongs to the value alone and never runs under the label.
+// The value column has a fixed width (not '*') so every field's line ends
+// at the same x position regardless of label/value length. blank:true omits
+// the value (and its '—' placeholder) for fields the client fills in by
+// hand/signature rather than ones pre-filled from data.
+const FIELD_VALUE_W = CONTENT_WIDTH - FIELD_LABEL_W - 8
+
 function underlineField(label, value, { marginBottom = 16, blank = false } = {}) {
   return {
     margin: [0, 0, 0, marginBottom],
-    table: {
-      widths: ['*'],
-      body: [
-        [
-          {
-            columns: [
-              { width: '*', text: blank ? '' : rtl(value || '—'), alignment: 'right' },
-              { width: FIELD_LABEL_W, text: rtl(`${label}:`), bold: true, color: GREY, alignment: 'right' },
-            ],
-            columnGap: 8,
-          },
-        ],
-      ],
-    },
-    layout: {
-      hLineWidth: (i) => (i === 1 ? 1 : 0),
-      vLineWidth: () => 0,
-      hLineColor: () => GREY,
-      paddingLeft: () => 0,
-      paddingRight: () => 0,
-      paddingTop: () => 0,
-      paddingBottom: () => 3,
-    },
+    columns: [
+      {
+        width: FIELD_VALUE_W,
+        table: { widths: ['*'], body: [[{ text: blank ? '' : rtl(value || '—'), alignment: 'right' }]] },
+        layout: {
+          hLineWidth: (i) => (i === 1 ? 1 : 0),
+          vLineWidth: () => 0,
+          hLineColor: () => GREY,
+          paddingLeft: () => 0,
+          paddingRight: () => 0,
+          paddingTop: () => 0,
+          paddingBottom: () => 3,
+        },
+      },
+      { width: FIELD_LABEL_W, text: rtl(`${label}:`), bold: true, color: GREY, alignment: 'right' },
+    ],
+    columnGap: 8,
   }
 }
 
