@@ -232,9 +232,9 @@ export default function PartOrderCard({ order, manager = false, onChanged, onPri
       {!editing && (
         <ul className="mt-3 divide-y divide-border border-t border-border">
           {requestLines.map((r) => (
-            <li key={r.id} className="flex items-center justify-between gap-3 py-2.5">
+            <li key={r.id} className="flex items-center gap-2 py-2.5">
               <span className="font-medium">{r.catalog_items?.name || r.other_description}</span>
-              <span className="text-sm text-primary shrink-0">כמות: {r.quantity}</span>
+              <span className="text-sm text-primary shrink-0">· כמות: {r.quantity}</span>
             </li>
           ))}
         </ul>
