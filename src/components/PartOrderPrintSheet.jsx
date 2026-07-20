@@ -81,6 +81,13 @@ export default function PartOrderPrintSheet({ order, onClose }) {
             <p className="mt-1 whitespace-pre-wrap leading-relaxed">{order.notes}</p>
           </div>
         )}
+
+        <div className="mt-16 grid grid-cols-2 gap-12">
+          <div className="border-b border-gray-500 pb-1.5 h-9" />
+          <div className="border-b border-gray-500 pb-1.5 h-9" />
+          <p className="text-sm text-gray-600">שם העובד שהכין את ההזמנה</p>
+          <p className="text-sm text-gray-600">תאריך השלמת ההזמנה</p>
+        </div>
       </div>
     </div>
   )
