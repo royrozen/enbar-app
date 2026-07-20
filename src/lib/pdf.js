@@ -51,32 +51,37 @@ async function fetchLogoDataUrl() {
 const CONTENT_WIDTH = 515 // page width 595.28 minus the 40+40 side margins
 const FIELD_LABEL_W = 100
 
-// One "underline field" — value sits directly on the line (a table cell's
-// bottom border, so spacing is native cell padding, not a hand-tuned margin
-// fighting a sibling column's line-height), label caption below-right —
-// matching the approval-document template (enbar-extras-approval-template.pdf).
-// (An earlier columns-based version put the value in a row next to an empty
-// spacer column — that empty column's own default line-height, not the
-// value's, ended up governing the row height, so margin tweaks on the value
-// text had no visible effect. Table cell padding doesn't have that problem.)
-function underlineField(label, value, { marginBottom = 16 } = {}) {
+// One field: value and its "label:" caption side by side on the SAME row
+// (label rightmost, like every other RTL row in this file), with a thin
+// rule directly under that row via a 1x1 table's bottom border. blank:true
+// omits the value (and its '—' placeholder) for fields the client fills in
+// by hand/signature rather than ones pre-filled from data.
+function underlineField(label, value, { marginBottom = 16, blank = false } = {}) {
   return {
     margin: [0, 0, 0, marginBottom],
-    stack: [
-      {
-        table: { widths: ['*'], body: [[{ text: rtl(value || '—'), alignment: 'right' }]] },
-        layout: {
-          hLineWidth: (i) => (i === 1 ? 1 : 0),
-          vLineWidth: () => 0,
-          hLineColor: () => GREY,
-          paddingLeft: () => 0,
-          paddingRight: () => 0,
-          paddingTop: () => 0,
-          paddingBottom: () => 3,
-        },
-      },
-      { text: rtl(`${label}:`), bold: true, color: GREY, alignment: 'right', margin: [0, 4, 0, 0] },
-    ],
+    table: {
+      widths: ['*'],
+      body: [
+        [
+          {
+            columns: [
+              { width: '*', text: blank ? '' : rtl(value || '—'), alignment: 'right' },
+              { width: FIELD_LABEL_W, text: rtl(`${label}:`), bold: true, color: GREY, alignment: 'right' },
+            ],
+            columnGap: 8,
+          },
+        ],
+      ],
+    },
+    layout: {
+      hLineWidth: (i) => (i === 1 ? 1 : 0),
+      vLineWidth: () => 0,
+      hLineColor: () => GREY,
+      paddingLeft: () => 0,
+      paddingRight: () => 0,
+      paddingTop: () => 0,
+      paddingBottom: () => 3,
+    },
   }
 }
 
@@ -98,14 +103,7 @@ function approvalBlock(daysText) {
     absolutePosition: { x: APPROVAL_ANCHOR_X, y: APPROVAL_ANCHOR_Y },
     width: CONTENT_WIDTH,
     stack: [
-      {
-        columns: [
-          { width: '*', text: rtl(daysText || '—'), color: DARK },
-          { width: FIELD_LABEL_W, text: rtl('ימי עבודה לחיוב:'), bold: true, color: GREY, alignment: 'right' },
-        ],
-        columnGap: 8,
-        margin: [0, 0, 0, 10],
-      },
+      underlineField('ימי עבודה לחיוב', daysText, { marginBottom: 14 }),
       {
         table: {
           widths: ['*'],
@@ -132,19 +130,7 @@ function approvalBlock(daysText) {
         margin: [0, 0, 0, 16],
       },
       { text: rtl('פרטי המאשר וחתימה:'), bold: true, fontSize: 11, margin: [0, 0, 0, 10] },
-      {
-        columns: [
-          {
-            width: '*',
-            margin: [0, 16, 0, 0],
-            canvas: [
-              { type: 'line', x1: 0, y1: 0, x2: CONTENT_WIDTH - FIELD_LABEL_W - 8, y2: 0, lineWidth: 1, lineColor: GREY },
-            ],
-          },
-          { width: FIELD_LABEL_W, text: rtl('שם מלא:'), bold: true, color: GREY, alignment: 'right' },
-        ],
-        columnGap: 8,
-      },
+      underlineField('שם מלא', null, { marginBottom: 0, blank: true }),
       {
         margin: [0, 22, 0, 0],
         columns: [
