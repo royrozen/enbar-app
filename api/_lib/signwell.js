@@ -13,9 +13,9 @@ const API_BASE = 'https://www.signwell.com/api/v1'
 // unverified without live credentials; if fields land upside-down/mirrored
 // on the first real test, flip y -> (841.89 - y - height) for each field.
 export const SIGNWELL_FIELDS = {
-  fullName: { page: 1, x: 150, y: 660, width: 300, height: 16 },
-  signature: { page: 1, x: 46, y: 710, width: 178, height: 34 },
-  dateSigned: { page: 1, x: 270, y: 724, width: 180, height: 14 },
+  fullName: { page: 1, x: 150, y: 684, width: 290, height: 16 },
+  signature: { page: 1, x: 46, y: 724, width: 178, height: 40 },
+  dateSigned: { page: 1, x: 270, y: 729, width: 180, height: 16 },
 }
 
 function apiKey() {

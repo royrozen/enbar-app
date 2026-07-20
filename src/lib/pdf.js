@@ -48,61 +48,92 @@ async function fetchLogoDataUrl() {
   return logoDataUrl
 }
 
-function detailRow(label, value) {
-  return [
-    { text: rtl(value || '—'), color: DARK, margin: [0, 2, 0, 2] },
-    { text: rtl(label), bold: true, color: GREY, margin: [0, 2, 0, 2] },
-  ]
+const CONTENT_WIDTH = 515 // page width 595.28 minus the 40+40 side margins
+const FIELD_LABEL_W = 100
+
+// One "underline field" — value sits on the line, label caption below-right —
+// matching the approval-document template (enbar-extras-approval-template.pdf).
+function underlineField(label, value, { marginBottom = 16 } = {}) {
+  return {
+    margin: [0, 0, 0, marginBottom],
+    stack: [
+      { text: rtl(value || '—'), margin: [0, 0, 0, 4] },
+      {
+        columns: [
+          {
+            width: '*',
+            canvas: [{ type: 'line', x1: 0, y1: 0, x2: CONTENT_WIDTH - FIELD_LABEL_W - 8, y2: 0, lineWidth: 1, lineColor: GREY }],
+          },
+          { width: FIELD_LABEL_W, text: rtl(`${label}:`), bold: true, color: GREY, alignment: 'right' },
+        ],
+        columnGap: 8,
+      },
+    ],
+  }
 }
 
-// Client-approval block (heading, declaration, name/signature/date fields) is
+// Client-approval block (declaration box, name/signature/date fields) is
 // pinned to a fixed page position via absolutePosition — NOT left in normal
 // flow — so its coordinates are identical on every generated PDF regardless
 // of how long the description above it is. This is required so the SignWell
-// e-signature integration (src/lib/../../api/_lib/signwell.js) can place its
+// e-signature integration (api/_lib/signwell.js) can place its
 // signature/date/name fields at hard-coded coordinates that always line up.
 // If these values change, SIGNWELL_FIELDS in api/_lib/signwell.js must be
 // updated to match (coordinates were derived together, see that file).
 const APPROVAL_ANCHOR_X = 40
-const APPROVAL_ANCHOR_Y = 600
-const APPROVAL_WIDTH = 515 // = page width 595.28 minus the 40+40 side margins
-const NAME_LABEL_W = 92
+const APPROVAL_ANCHOR_Y = 530
 const SIG_BOX_W = 190
 const SIG_BOX_H = 48
 
-function approvalBlock() {
+function approvalBlock(daysText) {
   return {
     absolutePosition: { x: APPROVAL_ANCHOR_X, y: APPROVAL_ANCHOR_Y },
-    width: APPROVAL_WIDTH,
+    width: CONTENT_WIDTH,
     stack: [
-      { text: rtl('אישור הלקוח'), bold: true, fontSize: 12, margin: [0, 0, 0, 5] },
       {
-        text: rtl(
-          'אני, החתום/ה מטה, מאשר/ת את ביצוע התוספת/החריגה המתוארת לעיל, לרבות ימי העבודה לחיוב, בנוסף להיקף העבודה המקורי שהוזמן מאת ענבר תעשיות פח.',
-        ),
-        fontSize: 9,
-        color: GREY,
-        lineHeight: 1.25,
-        margin: [0, 0, 0, 14],
+        columns: [
+          { width: '*', text: rtl(daysText || '—'), color: DARK },
+          { width: FIELD_LABEL_W, text: rtl('ימי עבודה לחיוב:'), bold: true, color: GREY, alignment: 'right' },
+        ],
+        columnGap: 8,
+        margin: [0, 0, 0, 10],
       },
+      {
+        table: {
+          widths: ['*'],
+          body: [
+            [
+              {
+                stack: [
+                  { text: rtl('הצהרת הלקוח:'), bold: true, fontSize: 9, color: GREY, margin: [0, 0, 0, 2] },
+                  {
+                    text: rtl(
+                      'אני, החתום/ה מטה, מאשר/ת בזאת את ביצוע התוספת / החריגה המתוארת לעיל, לרבות ימי העבודה לחיוב, וזאת בנוסף להיקף העבודה המקורי שהוזמן מאת ענבר תעשיות פח.',
+                    ),
+                    fontSize: 9,
+                    color: GREY,
+                    lineHeight: 1.3,
+                  },
+                ],
+                margin: [10, 8, 10, 8],
+              },
+            ],
+          ],
+        },
+        layout: { hLineWidth: () => 0, vLineWidth: () => 0, fillColor: () => '#F4F6F9' },
+        margin: [0, 0, 0, 16],
+      },
+      { text: rtl('פרטי המאשר וחתימה:'), bold: true, fontSize: 11, margin: [0, 0, 0, 10] },
       {
         columns: [
           {
             width: '*',
             margin: [0, 16, 0, 0],
             canvas: [
-              {
-                type: 'line',
-                x1: 0,
-                y1: 0,
-                x2: APPROVAL_WIDTH - NAME_LABEL_W - 8,
-                y2: 0,
-                lineWidth: 1,
-                lineColor: GREY,
-              },
+              { type: 'line', x1: 0, y1: 0, x2: CONTENT_WIDTH - FIELD_LABEL_W - 8, y2: 0, lineWidth: 1, lineColor: GREY },
             ],
           },
-          { width: NAME_LABEL_W, text: rtl('שם מלא:'), bold: true, color: GREY, alignment: 'right' },
+          { width: FIELD_LABEL_W, text: rtl('שם מלא:'), bold: true, color: GREY, alignment: 'right' },
         ],
         columnGap: 8,
       },
@@ -223,23 +254,10 @@ export async function generateExceptionPdf(exception) {
     descWrap = 86
   }
 
-  const detailsBody = [
-    detailRow('פרויקט', project.city ? `${project.name} — ${project.city}` : project.name),
-    detailRow('לקוח', client.name),
-  ]
-  if (project.contact_person || project.phone) {
-    detailsBody.push(
-      detailRow('איש קשר', [project.contact_person, project.phone].filter(Boolean).join(' · ')),
-    )
-  }
-  if (project.email) detailsBody.push(detailRow('דוא"ל', project.email))
-  detailsBody.push(detailRow('ימי עבודה לחיוב', daysText))
-  detailsBody.push(detailRow('תאריך הדיווח', formatDate(exception.created_at)))
-
   const dd = {
     pageSize: 'A4',
     pageMargins: [40, 36, 40, 50],
-    info: { title: 'דוח חריגים ותוספות — ענבר תעשיות פח' },
+    info: { title: 'אישור תוספת / חריגה — ענבר תעשיות פח' },
     defaultStyle: {
       font: 'Heebo',
       fontSize: 11,
@@ -248,7 +266,7 @@ export async function generateExceptionPdf(exception) {
       lineHeight: 1.3,
     },
     footer: () => ({
-      text: rtl('ענבר תעשיות פח · חיפה · הופק באמצעות מערכת דוחות העבודה'),
+      text: rtl('ענבר תעשיות פח בע"מ | מסמך זה נחתם אלקטרונית ומהווה אישור מחייב לביצוע העבודה'),
       alignment: 'center',
       fontSize: 8,
       color: GREY,
@@ -257,38 +275,31 @@ export async function generateExceptionPdf(exception) {
     content: [
       headerBlock,
       {
-        canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 2, lineColor: NAVY }],
+        canvas: [{ type: 'line', x1: 0, y1: 0, x2: CONTENT_WIDTH, y2: 0, lineWidth: 2, lineColor: NAVY }],
         margin: [0, 12, 0, 20],
       },
       {
-        text: rtl('דוח חריגים ותוספות'),
+        text: rtl('אישור תוספת / חריגה'),
         fontSize: 17,
         bold: true,
         alignment: 'center',
         margin: [0, 0, 0, 4],
       },
       {
-        text: rtl('מסמך לאישור הלקוח — נא לחתום ולהחזיר. ללא חתימה העבודה לא תבוצע.'),
+        text: rtl('אישור לקוח לביצוע עבודה נוספת שאינה כלולה בהזמנה המקורית'),
         fontSize: 9,
         color: GREY,
         alignment: 'center',
-        margin: [0, 0, 0, 18],
+        margin: [0, 0, 0, 20],
       },
+      underlineField('לקוח', client.name),
+      underlineField('אתר', project.name),
+      underlineField('כתובת האתר', project.city),
       {
-        table: { widths: ['*', 120], body: detailsBody },
-        layout: {
-          hLineWidth: (i, node) => (i === 0 || i === node.table.body.length ? 0 : 0.5),
-          vLineWidth: () => 0,
-          hLineColor: () => LIGHT,
-          paddingTop: () => 5,
-          paddingBottom: () => 5,
-        },
-      },
-      {
-        text: rtl('תיאור העבודה הנדרשת'),
+        text: rtl('תיאור התוספת / החריגה:'),
         bold: true,
         fontSize: 12,
-        margin: [0, 22, 0, 8],
+        margin: [0, 0, 0, 8],
       },
       {
         table: {
@@ -310,8 +321,9 @@ export async function generateExceptionPdf(exception) {
           hLineColor: () => LIGHT,
           vLineColor: () => LIGHT,
         },
+        margin: [0, 0, 0, 16],
       },
-      approvalBlock(),
+      approvalBlock(daysText),
     ],
   }
 
