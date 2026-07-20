@@ -3,6 +3,12 @@ import { createSignwellDocument } from '../_lib/signwell.js'
 
 const SELECT = '*, projects(name, city, contact_person, phone, email, clients(name))'
 
+// SignWell requires a recipient email regardless of delivery channel — most
+// project records here only have a phone on file (signing itself is shared
+// via WhatsApp, not SignWell's own email). Placeholder per product decision
+// until project records reliably carry a real client email.
+const FALLBACK_RECIPIENT_EMAIL = 'office@enbarsteel.com'
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'method not allowed' })
@@ -30,7 +36,7 @@ export default async function handler(req, res) {
     const project = log.projects || {}
     const client = project.clients || {}
     const recipientName = project.contact_person || client.name || 'לקוח'
-    const recipientEmail = project.email || undefined
+    const recipientEmail = project.email || FALLBACK_RECIPIENT_EMAIL
     const base64 = String(pdfBase64).replace(/^data:application\/pdf;base64,/, '')
 
     const doc = await createSignwellDocument({
