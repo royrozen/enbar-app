@@ -57,7 +57,13 @@ function underlineField(label, value, { marginBottom = 16 } = {}) {
   return {
     margin: [0, 0, 0, marginBottom],
     stack: [
-      { text: rtl(value || '—'), margin: [0, 0, 0, 4] },
+      {
+        columns: [
+          { width: '*', text: rtl(value || '—'), alignment: 'right', margin: [0, 0, 0, 4] },
+          { width: FIELD_LABEL_W, text: '' },
+        ],
+        columnGap: 8,
+      },
       {
         columns: [
           {
