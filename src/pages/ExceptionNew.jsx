@@ -11,6 +11,7 @@ import {
   PencilIcon,
 } from '../components/Icons'
 import { supabase, fetchActiveTeamLead, EXCEPTION_PHOTO_BUCKET } from '../lib/supabase'
+import { MAX_EXCEPTION_DESCRIPTION_LENGTH } from '../lib/format'
 
 const DRAFT_KEY = 'enbar_exception_draft'
 const MAX_PHOTOS = 10
@@ -141,6 +142,8 @@ export default function ExceptionNew() {
     const d = Number(workDays)
     if (!Number.isInteger(d) || d < 1 || d > 99) errs.workDays = 'משך העבודה חייב להיות בין 1 ל־99 ימים'
     if (desc.trim().length < 5) errs.desc = 'יש להזין תיאור עבודה של 5 תווים לפחות'
+    else if (desc.trim().length > MAX_EXCEPTION_DESCRIPTION_LENGTH)
+      errs.desc = `התיאור ארוך מדי — עד ${MAX_EXCEPTION_DESCRIPTION_LENGTH} תווים (המסמך לחתימה חייב להישאר בעמוד אחד)`
     const b = Number(billableDays)
     if (!Number.isFinite(b) || b < 0.5 || b > 999) errs.days = 'כמות הימים לחיוב חייבת להיות בין 0.5 ל־999'
     return errs
@@ -393,12 +396,16 @@ export default function ExceptionNew() {
               id="desc"
               className="input"
               rows={4}
+              maxLength={MAX_EXCEPTION_DESCRIPTION_LENGTH}
               placeholder="תיאור הפער בין מה שסוכם בחוזה לבין המצב בשטח והעבודה הנדרשת..."
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
               aria-invalid={!!errors.desc}
               disabled={submitting}
             />
+            <p className="mt-1 text-xs text-primary text-left" dir="ltr">
+              {desc.length}/{MAX_EXCEPTION_DESCRIPTION_LENGTH}
+            </p>
             {errors.desc && <p className="err">{errors.desc}</p>}
           </div>
 

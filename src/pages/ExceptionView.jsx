@@ -17,6 +17,7 @@ import {
   UploadIcon,
   FileTextIcon,
   SendIcon,
+  ClipboardIcon,
 } from "../components/Icons";
 import {
   supabase,
@@ -26,7 +27,11 @@ import {
   EXCEPTION_DOC_BUCKET,
   SIGNED_DOC_BUCKET,
 } from "../lib/supabase";
-import { formatDate, EXCEPTION_STATUS_LABELS } from "../lib/format";
+import {
+  formatDate,
+  EXCEPTION_STATUS_LABELS,
+  MAX_EXCEPTION_DESCRIPTION_LENGTH,
+} from "../lib/format";
 
 // Manual chips cover pending/sent only — approved is set exclusively by
 // uploading the signed document.
@@ -70,6 +75,12 @@ export default function ExceptionView({ backTo = "/home" }) {
   const [statusError, setStatusError] = useState("");
   const [docUploading, setDocUploading] = useState(false);
   const [docError, setDocError] = useState("");
+
+  // SignWell e-signature send
+  const [signBusy, setSignBusy] = useState(false);
+  const [signError, setSignError] = useState("");
+  const [signingLink, setSigningLink] = useState("");
+  const [linkCopied, setLinkCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -134,6 +145,8 @@ export default function ExceptionView({ backTo = "/home" }) {
       errs.workDays = "משך העבודה חייב להיות בין 1 ל־99 ימים";
     if (desc.trim().length < 5)
       errs.desc = "יש להזין תיאור עבודה של 5 תווים לפחות";
+    else if (desc.trim().length > MAX_EXCEPTION_DESCRIPTION_LENGTH)
+      errs.desc = `התיאור ארוך מדי — עד ${MAX_EXCEPTION_DESCRIPTION_LENGTH} תווים (המסמך לחתימה חייב להישאר בעמוד אחד)`;
     const b = Number(billableDaysEdit);
     if (!Number.isFinite(b) || b < 0.5 || b > 999)
       errs.days = "כמות הימים לחיוב חייבת להיות בין 0.5 ל־999";
@@ -226,6 +239,62 @@ export default function ExceptionView({ backTo = "/home" }) {
       setPdfError("הפקת הדוח נכשלה — נסו שוב");
     } finally {
       setPdfBusy(false);
+    }
+  }
+
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function sendForSignature() {
+    if (!log || signBusy || locked) return;
+    setSignBusy(true);
+    setSignError("");
+    setSigningLink("");
+    try {
+      const { generateExceptionPdf } = await import("../lib/pdf");
+      const blob = await generateExceptionPdf(log);
+      const pdfBase64 = await blobToBase64(blob);
+      const by = PROFILES[getProfile()] || "לא ידוע";
+      const res = await fetch("/api/extras/send-for-signature", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ exceptionId: log.id, pdfBase64, by }),
+      });
+      if (!res.ok) throw new Error("send failed");
+      const { signingUrl } = await res.json();
+      await refresh();
+
+      const name = log.projects?.contact_person || log.projects?.clients?.name || "לקוח";
+      const project = log.projects?.name || "";
+      const text = encodeURIComponent(
+        `שלום ${name}, מצורף קישור לאישור וחתימה על תוספת/חריגה בפרויקט ${project}: ${signingUrl} - ענבר תעשיות פח`,
+      );
+      const phone = (log.projects?.phone || "").replace(/[^\d]/g, "").replace(/^0/, "972");
+      if (phone) {
+        window.open(`https://wa.me/${phone}?text=${text}`, "_blank");
+      } else {
+        setSigningLink(signingUrl);
+      }
+    } catch {
+      setSignError("שליחה לחתימה נכשלה — נסו שוב");
+    } finally {
+      setSignBusy(false);
+    }
+  }
+
+  async function copySigningLink() {
+    try {
+      await navigator.clipboard.writeText(signingLink);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      /* clipboard unavailable — link is still shown for manual copy */
     }
   }
 
@@ -468,7 +537,47 @@ export default function ExceptionView({ backTo = "/home" }) {
                     צפייה בדוח
                   </a>
                 )}
+                <button
+                  type="button"
+                  className="btn btn-success"
+                  onClick={sendForSignature}
+                  disabled={signBusy || locked}
+                >
+                  {signBusy ? <SpinnerIcon size={18} /> : <SendIcon size={18} />}
+                  שלח לחתימה בוואטסאפ
+                </button>
               </div>
+              {signError && <p className="err">{signError}</p>}
+              {log.signwell_document_id && log.status === "sent" && (
+                <p className="mt-2 text-sm font-bold text-blue-800">
+                  נשלח לחתימה — ממתין לחתימת הלקוח
+                </p>
+              )}
+              {signingLink && (
+                <div className="mt-3 rounded-xl border-2 border-accent/40 bg-muted p-4">
+                  <p className="font-bold text-sm mb-2">
+                    ללקוח אין מספר וואטסאפ שמור — אפשר להעתיק את קישור החתימה ולשלוח ידנית
+                  </p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <input
+                      type="text"
+                      dir="ltr"
+                      readOnly
+                      value={signingLink}
+                      className="input !min-h-[44px] flex-1 min-w-0 text-sm"
+                      onFocus={(e) => e.target.select()}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      onClick={copySigningLink}
+                    >
+                      <ClipboardIcon size={16} />
+                      {linkCopied ? "הועתק!" : "העתקת קישור"}
+                    </button>
+                  </div>
+                </div>
+              )}
               {log.pdf_path && !locked && (
                 <div className="mt-3 border-t border-border pt-3">
                   <p className="label !text-xs">עדכון סטטוס</p>
@@ -676,11 +785,15 @@ export default function ExceptionView({ backTo = "/home" }) {
                 id="e-desc"
                 className="input"
                 rows={4}
+                maxLength={MAX_EXCEPTION_DESCRIPTION_LENGTH}
                 value={desc}
                 onChange={(e) => setDesc(e.target.value)}
                 aria-invalid={!!errors.desc}
                 disabled={saving}
               />
+              <p className="mt-1 text-xs text-primary text-left" dir="ltr">
+                {desc.length}/{MAX_EXCEPTION_DESCRIPTION_LENGTH}
+              </p>
               {errors.desc && <p className="err">{errors.desc}</p>}
             </div>
 

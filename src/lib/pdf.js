@@ -55,17 +55,102 @@ function detailRow(label, value) {
   ]
 }
 
-function signatureField(label) {
+// Client-approval block (heading, declaration, name/signature/date fields) is
+// pinned to a fixed page position via absolutePosition — NOT left in normal
+// flow — so its coordinates are identical on every generated PDF regardless
+// of how long the description above it is. This is required so the SignWell
+// e-signature integration (src/lib/../../api/_lib/signwell.js) can place its
+// signature/date/name fields at hard-coded coordinates that always line up.
+// If these values change, SIGNWELL_FIELDS in api/_lib/signwell.js must be
+// updated to match (coordinates were derived together, see that file).
+const APPROVAL_ANCHOR_X = 40
+const APPROVAL_ANCHOR_Y = 600
+const APPROVAL_WIDTH = 515 // = page width 595.28 minus the 40+40 side margins
+const NAME_LABEL_W = 92
+const SIG_BOX_W = 190
+const SIG_BOX_H = 48
+
+function approvalBlock() {
   return {
-    width: '*',
+    absolutePosition: { x: APPROVAL_ANCHOR_X, y: APPROVAL_ANCHOR_Y },
+    width: APPROVAL_WIDTH,
     stack: [
+      { text: rtl('אישור הלקוח'), bold: true, fontSize: 12, margin: [0, 0, 0, 5] },
       {
-        canvas: [
-          { type: 'line', x1: 0, y1: 0, x2: 140, y2: 0, lineWidth: 1, lineColor: GREY },
-        ],
-        alignment: 'center',
+        text: rtl(
+          'אני, החתום/ה מטה, מאשר/ת את ביצוע התוספת/החריגה המתוארת לעיל, לרבות ימי העבודה לחיוב, בנוסף להיקף העבודה המקורי שהוזמן מאת ענבר תעשיות פח.',
+        ),
+        fontSize: 9,
+        color: GREY,
+        lineHeight: 1.25,
+        margin: [0, 0, 0, 14],
       },
-      { text: rtl(label), alignment: 'center', fontSize: 10, color: GREY, margin: [0, 6, 0, 0] },
+      {
+        columns: [
+          {
+            width: '*',
+            margin: [0, 16, 0, 0],
+            canvas: [
+              {
+                type: 'line',
+                x1: 0,
+                y1: 0,
+                x2: APPROVAL_WIDTH - NAME_LABEL_W - 8,
+                y2: 0,
+                lineWidth: 1,
+                lineColor: GREY,
+              },
+            ],
+          },
+          { width: NAME_LABEL_W, text: rtl('שם מלא:'), bold: true, color: GREY, alignment: 'right' },
+        ],
+        columnGap: 8,
+      },
+      {
+        margin: [0, 22, 0, 0],
+        columns: [
+          {
+            width: SIG_BOX_W,
+            stack: [
+              {
+                canvas: [
+                  {
+                    type: 'rect',
+                    x: 0,
+                    y: 0,
+                    w: SIG_BOX_W,
+                    h: SIG_BOX_H,
+                    lineWidth: 1,
+                    lineColor: GREY,
+                    dash: { length: 3, space: 2 },
+                  },
+                ],
+              },
+              {
+                text: rtl('חתימת הלקוח'),
+                fontSize: 8,
+                color: GREY,
+                alignment: 'right',
+                margin: [8, -SIG_BOX_H + 6, 8, 0],
+              },
+            ],
+          },
+          { width: 16, text: '' },
+          {
+            width: '*',
+            margin: [0, SIG_BOX_H / 2 - 7, 0, 0],
+            columns: [
+              {
+                width: '*',
+                canvas: [{ type: 'line', x1: 0, y1: 0, x2: 110, y2: 0, lineWidth: 1, lineColor: GREY }],
+              },
+              { width: 92, text: rtl('תאריך החתימה:'), bold: true, color: GREY, alignment: 'right' },
+            ],
+            columnGap: 8,
+          },
+        ],
+        columnGap: 10,
+      },
     ],
   }
 }
@@ -226,23 +311,7 @@ export async function generateExceptionPdf(exception) {
           vLineColor: () => LIGHT,
         },
       },
-      {
-        text: rtl('אישור הלקוח'),
-        bold: true,
-        fontSize: 12,
-        margin: [0, 30, 0, 6],
-      },
-      {
-        text: rtl('אנו מאשרים את ביצוע העבודה המפורטת במסמך זה ואת חיוב ימי העבודה שצוינו.'),
-        fontSize: 10,
-        color: GREY,
-        margin: [0, 0, 0, 28],
-      },
-      {
-        // Visual RTL: first field (name) is rightmost, so it comes last in the array
-        columns: [signatureField('חתימה'), signatureField('תאריך'), signatureField('שם החותם')],
-        columnGap: 26,
-      },
+      approvalBlock(),
     ],
   }
 
