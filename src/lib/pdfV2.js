@@ -6,6 +6,7 @@ import { heeboRegular, heeboBold } from './heeboFonts'
 import { rtl, rtlBlock } from './rtl'
 import { formatDate, todayISO } from './format'
 import { LOGO_URL } from '../components/Logo'
+import { exceptionPhotoUrl } from './supabase'
 
 pdfMake.vfs = {
   'Heebo-Regular.ttf': heeboRegular,
@@ -49,6 +50,67 @@ async function fetchLogoDataUrl() {
   return logoDataUrl
 }
 
+// pdfmake can only embed images as base64 — same fetch-and-convert pattern
+// as fetchLogoDataUrl(), just not cached (each exception has different photos).
+async function fetchPhotoDataUrl(url) {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error('photo fetch failed')
+  const blob = await res.blob()
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
+
+const PHOTO_CELL_W = 158
+const PHOTO_CELL_H = 58
+
+// Up to 3 photos side by side, sorted the same way as the on-screen gallery
+// (ExceptionView.jsx). Skips photos that fail to fetch rather than failing
+// the whole document. Returns null when there's nothing to show, so callers
+// can omit the section entirely — no heading, no reserved gap.
+async function photoStrip(photos) {
+  const ordered = [...(photos || [])].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+  const dataUrls = []
+  for (const p of ordered.slice(0, 3)) {
+    try {
+      dataUrls.push(await fetchPhotoDataUrl(exceptionPhotoUrl(p.storage_path)))
+    } catch {
+      // one bad photo shouldn't block the document — just skip it
+    }
+  }
+  if (dataUrls.length === 0) return null
+
+  return {
+    stack: [
+      { text: rtl('תמונות מהשטח'), bold: true, fontSize: 10, color: GREY, margin: [0, 0, 0, 6] },
+      {
+        columns: dataUrls.map((dataUrl) => ({
+          width: PHOTO_CELL_W,
+          table: {
+            widths: ['*'],
+            body: [[{ image: dataUrl, fit: [PHOTO_CELL_W - 8, PHOTO_CELL_H - 8], alignment: 'center' }]],
+          },
+          layout: {
+            hLineWidth: () => 0.75,
+            vLineWidth: () => 0.75,
+            hLineColor: () => LIGHT,
+            vLineColor: () => LIGHT,
+            paddingLeft: () => 4,
+            paddingRight: () => 4,
+            paddingTop: () => 4,
+            paddingBottom: () => 4,
+          },
+        })),
+        columnGap: 8,
+      },
+    ],
+    margin: [0, 0, 0, 10],
+  }
+}
+
 const CONTENT_WIDTH = 515
 
 // Everything from the billable-days stat box through the signature block is
@@ -60,10 +122,12 @@ const CONTENT_WIDTH = 515
 // MAX_EXCEPTION_DESCRIPTION_LENGTH (300 chars, src/lib/format.js) — measured
 // empirically, the description card above this anchor varies by at most
 // ~15pt between a one-line and a full 300-char description, well inside the
-// margin reserved here. If ANCHOR_Y or the internal layout below change,
-// SIGNWELL_FIELDS in api/_lib/signwell.js must be re-measured to match.
+// margin reserved here, plus room for up to 3 field photos (photoStrip())
+// inserted in normal flow between the description and this anchor. If
+// ANCHOR_Y or the internal layout below change, SIGNWELL_FIELDS in
+// api/_lib/signwell.js must be re-measured to match.
 const ANCHOR_X = 40
-const ANCHOR_Y = 450
+const ANCHOR_Y = 470
 
 // One label-over-value cell for the details strip.
 function detailCell(label, value) {
@@ -105,7 +169,7 @@ function approvalBlock(daysText) {
           vLineColor: () => NAVY,
           fillColor: () => PALE,
         },
-        margin: [0, 0, 0, 16],
+        margin: [0, 0, 0, 10],
       },
 
       // Declaration.
@@ -132,7 +196,7 @@ function approvalBlock(daysText) {
           ],
         },
         layout: { hLineWidth: () => 0, vLineWidth: () => 0, fillColor: () => PALE },
-        margin: [0, 0, 0, 22],
+        margin: [0, 0, 0, 12],
       },
 
       // Signature section. שם מלא and תאריך החתימה share one row; each is its
@@ -141,7 +205,7 @@ function approvalBlock(daysText) {
       // Physical column order is left-to-right; שם מלא is placed last so it
       // lands rightmost, i.e. read first in RTL — same [value][label]
       // convention as pdf.js's underlineField.
-      { text: rtl('פרטי המאשר וחתימה:'), bold: true, fontSize: 11, margin: [0, 0, 0, 10] },
+      { text: rtl('פרטי המאשר וחתימה:'), bold: true, fontSize: 11, margin: [0, 0, 0, 8] },
       {
         columnGap: 0,
         columns: [
@@ -179,7 +243,7 @@ function approvalBlock(daysText) {
         ],
       },
       {
-        margin: [0, 22, 0, 0],
+        margin: [0, 16, 0, 0],
         columnGap: 0,
         columns: [
           { width: '*', text: '' },
@@ -200,10 +264,10 @@ function approvalBlock(daysText) {
   }
 }
 
-// exception must include: work_description, billable_days,
-// projects { name, city, clients { name } } — same shape as generateExceptionPdf.
-// Returns a Promise<Blob>. Never triggers a browser download itself (see
-// pdf.js's note on pdfmake's .download() on mobile Safari).
+// exception must include: work_description, billable_days, exception_photos
+// (optional, [{ storage_path, sort_order }]), projects { name, city, clients
+// { name } }. Returns a Promise<Blob>. Never triggers a browser download
+// itself (see pdf.js's note on pdfmake's .download() on mobile Safari).
 export async function generateExceptionPdfV2(exception) {
   const project = exception.projects || {}
   const client = project.clients || {}
@@ -218,6 +282,8 @@ export async function generateExceptionPdfV2(exception) {
   } catch {
     logoBlock = { svg: MARK_SVG, width: 40 }
   }
+
+  const photos = await photoStrip(exception.exception_photos)
 
   let descFont = 11
   let descWrap = 78
@@ -274,7 +340,7 @@ export async function generateExceptionPdfV2(exception) {
       },
       {
         canvas: [{ type: 'line', x1: 0, y1: 0, x2: CONTENT_WIDTH, y2: 0, lineWidth: 2, lineColor: NAVY }],
-        margin: [0, 12, 0, 18],
+        margin: [0, 10, 0, 14],
       },
 
       // Details strip — three label/value cells in one bordered row.
@@ -295,11 +361,11 @@ export async function generateExceptionPdfV2(exception) {
           paddingTop: () => 8,
           paddingBottom: () => 8,
         },
-        margin: [0, 0, 0, 18],
+        margin: [0, 0, 0, 14],
       },
 
       // Description card.
-      { text: rtl('תיאור העבודה'), bold: true, fontSize: 12, margin: [0, 0, 0, 8] },
+      { text: rtl('תיאור העבודה'), bold: true, fontSize: 12, margin: [0, 0, 0, 6] },
       {
         table: {
           widths: ['*'],
@@ -320,11 +386,13 @@ export async function generateExceptionPdfV2(exception) {
           hLineColor: () => LIGHT,
           vLineColor: () => LIGHT,
         },
-        margin: [0, 0, 0, 16],
+        margin: [0, 0, 0, 10],
       },
 
+      photos,
+
       approvalBlock(daysText),
-    ],
+    ].filter(Boolean),
   }
 
   const pdf = pdfMake.createPdf(dd)

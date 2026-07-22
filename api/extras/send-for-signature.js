@@ -9,6 +9,21 @@ const SELECT = '*, projects(name, city, contact_person, phone, email, clients(na
 // until project records reliably carry a real client email.
 const FALLBACK_RECIPIENT_EMAIL = 'office@enbarsteel.com'
 
+// date_customer_site_Extra.pdf — the filename shown to the client in
+// SignWell's UI (document title, signing page, completed-doc name). Uses
+// today's date (the day the document is actually sent), not the log's
+// original creation date.
+function sanitizeForFilename(s) {
+  return String(s || '').replace(/[\\/:*?"<>|]/g, '').trim()
+}
+
+function todayDDMMYYYY() {
+  const d = new Date()
+  const dd = String(d.getDate()).padStart(2, '0')
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  return `${dd}-${mm}-${d.getFullYear()}`
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'method not allowed' })
@@ -39,9 +54,10 @@ export default async function handler(req, res) {
     const recipientEmail = project.email || FALLBACK_RECIPIENT_EMAIL
     const base64 = String(pdfBase64).replace(/^data:application\/pdf;base64,/, '')
 
+    const fileName = `${todayDDMMYYYY()}_${sanitizeForFilename(client.name) || 'לקוח'}_${sanitizeForFilename(project.name) || 'אתר'}_Extra.pdf`
     const doc = await createSignwellDocument({
       pdfBase64: base64,
-      fileName: `אישור-תוספת-${log.id}.pdf`,
+      fileName,
       recipientName,
       recipientEmail,
     })

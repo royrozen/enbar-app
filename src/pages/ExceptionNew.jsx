@@ -14,7 +14,7 @@ import { supabase, fetchActiveTeamLead, EXCEPTION_PHOTO_BUCKET } from '../lib/su
 import { MAX_EXCEPTION_DESCRIPTION_LENGTH } from '../lib/format'
 
 const DRAFT_KEY = 'enbar_exception_draft'
-const MAX_PHOTOS = 10
+const MAX_PHOTOS = 3
 
 export function autoBillableDays(workers, workDays) {
   const w = Number(workers) || 0

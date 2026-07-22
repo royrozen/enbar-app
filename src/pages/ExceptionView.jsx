@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import Header from "../components/Header";
 import StatusBadge from "../components/StatusBadge";
-import StatusChips from "../components/StatusChips";
 import PhotoUploader from "../components/PhotoUploader";
 import Lightbox from "../components/Lightbox";
 import {
@@ -13,7 +12,6 @@ import {
   PencilIcon,
   PlusIcon,
   MinusIcon,
-  DownloadIcon,
   UploadIcon,
   FileTextIcon,
   SendIcon,
@@ -27,22 +25,11 @@ import {
   EXCEPTION_DOC_BUCKET,
   SIGNED_DOC_BUCKET,
 } from "../lib/supabase";
-import {
-  formatDate,
-  EXCEPTION_STATUS_LABELS,
-  MAX_EXCEPTION_DESCRIPTION_LENGTH,
-} from "../lib/format";
-
-// Manual chips cover pending/sent only — approved is set exclusively by
-// uploading the signed document.
-const STATUS_CHIP_OPTIONS = [
-  { value: "pending", label: EXCEPTION_STATUS_LABELS.pending },
-  { value: "sent", label: EXCEPTION_STATUS_LABELS.sent },
-];
+import { formatDate, MAX_EXCEPTION_DESCRIPTION_LENGTH } from "../lib/format";
 import { getProfile, PROFILES } from "../lib/profile";
 import { autoBillableDays } from "./ExceptionNew";
 
-const MAX_PHOTOS = 10;
+const MAX_PHOTOS = 3;
 const SELECT =
   "*, projects(name, city, contact_person, phone, email, clients(name)), team_leads(name), exception_photos(*)";
 
@@ -66,13 +53,8 @@ export default function ExceptionView({ backTo = "/home" }) {
   const [saveError, setSaveError] = useState("");
   const [saveWarning, setSaveWarning] = useState("");
 
-  // PDF / share / signed / status state
-  const [pdfBusy, setPdfBusy] = useState(false);
-  const [pdfError, setPdfError] = useState("");
-  const [sharePrompt, setSharePrompt] = useState(false);
+  // Share / signed state
   const [sharePhone, setSharePhone] = useState("");
-  const [statusBusy, setStatusBusy] = useState(false);
-  const [statusError, setStatusError] = useState("");
   const [docUploading, setDocUploading] = useState(false);
   const [docError, setDocError] = useState("");
 
@@ -213,35 +195,6 @@ export default function ExceptionView({ backTo = "/home" }) {
     }
   }
 
-  async function generatePdf() {
-    if (!log || pdfBusy) return;
-    setPdfBusy(true);
-    setPdfError("");
-    try {
-      const { generateExceptionPdfV2 } = await import("../lib/pdfV2");
-      const blob = await generateExceptionPdfV2(log);
-      const path = `exceptions/${log.id}/${crypto.randomUUID()}.pdf`;
-      const { error: upErr } = await supabase.storage
-        .from(EXCEPTION_DOC_BUCKET)
-        .upload(path, blob, { contentType: "application/pdf" });
-      if (upErr) throw upErr;
-      const { error: updErr } = await supabase
-        .from("exception_logs")
-        .update({ pdf_path: path })
-        .eq("id", log.id);
-      if (updErr) throw updErr;
-      setLog((l) => ({ ...l, pdf_path: path }));
-      // Open last — on mobile Safari this can navigate the page away, so it
-      // must happen only once the upload/DB update already succeeded.
-      const url = supabase.storage.from(EXCEPTION_DOC_BUCKET).getPublicUrl(path).data.publicUrl;
-      window.open(url, "_blank");
-    } catch {
-      setPdfError("הפקת הדוח נכשלה — נסו שוב");
-    } finally {
-      setPdfBusy(false);
-    }
-  }
-
   function blobToBase64(blob) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -251,6 +204,11 @@ export default function ExceptionView({ backTo = "/home" }) {
     });
   }
 
+  // The one send action: generates the PDF, uploads it (pdf_path — also
+  // gates the signed-document upload below), sends it to SignWell for
+  // signature, then opens WhatsApp with the signing link. Safe to click
+  // again after "sent" — creates a fresh SignWell document each time,
+  // same as re-generating did before this was merged into one button.
   async function sendForSignature() {
     if (!log || signBusy || locked) return;
     setSignBusy(true);
@@ -259,6 +217,13 @@ export default function ExceptionView({ backTo = "/home" }) {
     try {
       const { generateExceptionPdfV2 } = await import("../lib/pdfV2");
       const blob = await generateExceptionPdfV2(log);
+
+      const path = `exceptions/${log.id}/${crypto.randomUUID()}.pdf`;
+      const { error: upErr } = await supabase.storage
+        .from(EXCEPTION_DOC_BUCKET)
+        .upload(path, blob, { contentType: "application/pdf" });
+      if (upErr) throw upErr;
+
       const pdfBase64 = await blobToBase64(blob);
       const by = PROFILES[getProfile()] || "לא ידוע";
       const res = await fetch("/api/extras/send-for-signature", {
@@ -268,12 +233,18 @@ export default function ExceptionView({ backTo = "/home" }) {
       });
       if (!res.ok) throw new Error("send failed");
       const { signingUrl } = await res.json();
+
+      const { error: updErr } = await supabase
+        .from("exception_logs")
+        .update({ pdf_path: path })
+        .eq("id", log.id);
+      if (updErr) throw updErr;
       await refresh();
 
       const name = log.projects?.contact_person || log.projects?.clients?.name || "לקוח";
       const project = log.projects?.name || "";
       const text = encodeURIComponent(
-        `שלום ${name}, מצורף קישור לאישור וחתימה על תוספת/חריגה בפרויקט ${project}: ${signingUrl} - ענבר תעשיות פח`,
+        `שלום ${name}\n${signingUrl}\nמצורף קישור לאישור וחתימה על תוספת/חריגה בפרויקט ${project} - ענבר תעשיות פח`,
       );
       const phone = (log.projects?.phone || "").replace(/[^\d]/g, "").replace(/^0/, "972");
       if (phone) {
@@ -298,20 +269,6 @@ export default function ExceptionView({ backTo = "/home" }) {
     }
   }
 
-  function shareWhatsApp() {
-    const url = exceptionDocPublicUrl();
-    const text = encodeURIComponent(
-      `שלום, מצורף דוח חריגים ותוספות מענבר תעשיות פח לאישורכם. נא לחתום ולהחזיר:\n${url}`,
-    );
-    const phone = sharePhone.replace(/[^\d]/g, "").replace(/^0/, "972");
-    const wa = phone
-      ? `https://wa.me/${phone}?text=${text}`
-      : `https://wa.me/?text=${text}`;
-    window.open(wa, "_blank");
-    setSharePrompt(false);
-    setStatus("sent");
-  }
-
   function shareSignedDocWhatsApp() {
     const url = signedDocUrl(log.signed_path);
     const text = encodeURIComponent(
@@ -328,40 +285,6 @@ export default function ExceptionView({ backTo = "/home" }) {
     return supabase.storage
       .from(EXCEPTION_DOC_BUCKET)
       .getPublicUrl(log.pdf_path).data.publicUrl;
-  }
-
-  async function shareFile() {
-    try {
-      const res = await fetch(exceptionDocPublicUrl());
-      const blob = await res.blob();
-      const file = new File([blob], "enbar-exception.pdf", {
-        type: "application/pdf",
-      });
-      await navigator.share({ files: [file], title: "דוח חריגים ותוספות" });
-      setStatus("sent"); // reached only when the share sheet completed
-    } catch {
-      /* user cancelled or unsupported — no-op */
-    }
-    setSharePrompt(false);
-  }
-
-  async function setStatus(status) {
-    if (statusBusy || locked || status === log.status) return;
-    setStatusBusy(true);
-    setStatusError("");
-    try {
-      const by = PROFILES[getProfile()] || "לא ידוע";
-      const { error: err } = await supabase
-        .from("exception_logs")
-        .update({ status, status_updated_by: by })
-        .eq("id", log.id);
-      if (err) throw err;
-      setLog((l) => ({ ...l, status, status_updated_by: by }));
-    } catch {
-      setStatusError("עדכון הסטטוס נכשל — נסו שוב");
-    } finally {
-      setStatusBusy(false);
-    }
   }
 
   async function uploadSignedDoc(e) {
@@ -508,51 +431,47 @@ export default function ExceptionView({ backTo = "/home" }) {
               )}
             </section>
 
-            {/* PDF + WhatsApp — disabled once the client's signed doc is in */}
+            {/* Send to client — disabled once the client's signed doc is in */}
             <section
               className={`card p-5 ${locked ? "opacity-50 pointer-events-none" : ""}`}
             >
-              <h2 className="font-bold mb-3">דוח לאישור הלקוח</h2>
-              <div className="flex gap-2 flex-wrap">
-                <button
-                  className="btn btn-accent"
-                  onClick={generatePdf}
-                  disabled={pdfBusy || locked}
-                >
-                  {pdfBusy ? (
-                    <SpinnerIcon size={18} />
-                  ) : (
-                    <DownloadIcon size={18} />
+              <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+                <h2 className="font-bold">דוח לאישור הלקוח</h2>
+                <div className="flex items-center gap-3">
+                  <StatusBadge status={log.status} />
+                  {log.pdf_path && (
+                    <a
+                      href={exceptionDocPublicUrl()}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm font-bold text-accent underline inline-flex items-center gap-1"
+                    >
+                      <FileTextIcon size={14} />
+                      צפייה בדוח
+                    </a>
                   )}
-                  הפקת דוח חריגים ותוספות
-                </button>
-                {log.pdf_path && (
-                  <a
-                    href={exceptionDocPublicUrl()}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn btn-outline"
-                  >
-                    <FileTextIcon size={18} />
-                    צפייה בדוח
-                  </a>
-                )}
-                <button
-                  type="button"
-                  className="btn btn-success"
-                  onClick={sendForSignature}
-                  disabled={signBusy || locked}
-                >
-                  {signBusy ? <SpinnerIcon size={18} /> : <SendIcon size={18} />}
-                  שלח לחתימה בוואטסאפ
-                </button>
+                </div>
               </div>
+
+              <button
+                type="button"
+                className="btn btn-accent w-full sm:w-auto"
+                onClick={sendForSignature}
+                disabled={signBusy || locked}
+              >
+                {signBusy ? <SpinnerIcon size={18} /> : <SendIcon size={18} />}
+                {log.status === "sent"
+                  ? "שליחה חוזרת לחתימה"
+                  : "הפקת דוח ושליחה לחתימה"}
+              </button>
               {signError && <p className="err">{signError}</p>}
-              {log.signwell_document_id && log.status === "sent" && (
+
+              {log.status === "sent" && (
                 <p className="mt-2 text-sm font-bold text-blue-800">
                   נשלח לחתימה — ממתין לחתימת הלקוח
                 </p>
               )}
+
               {signingLink && (
                 <div className="mt-3 rounded-xl border-2 border-accent/40 bg-muted p-4">
                   <p className="font-bold text-sm mb-2">
@@ -574,60 +493,6 @@ export default function ExceptionView({ backTo = "/home" }) {
                     >
                       <ClipboardIcon size={16} />
                       {linkCopied ? "הועתק!" : "העתקת קישור"}
-                    </button>
-                  </div>
-                </div>
-              )}
-              {log.pdf_path && !locked && (
-                <div className="mt-3 border-t border-border pt-3">
-                  <p className="label !text-xs">עדכון סטטוס</p>
-                  <StatusChips
-                    value={log.status}
-                    onChange={setStatus}
-                    options={STATUS_CHIP_OPTIONS}
-                  />
-                </div>
-              )}
-              {pdfError && <p className="err">{pdfError}</p>}
-              {statusError && <p className="err">{statusError}</p>}
-
-              {(log.pdf_path || sharePrompt) && (
-                <div className="mt-4 rounded-xl border-2 border-accent/40 bg-muted p-4">
-                  <p className="font-bold text-sm mb-2">
-                    לשלוח את הדוח לאישור אל
-                    {log.projects?.contact_person
-                      ? ` ${log.projects.contact_person}`
-                      : " הלקוח"}
-                    ?
-                  </p>
-                  <label className="label !text-xs" htmlFor="share-phone">
-                    מספר וואטסאפ
-                  </label>
-                  <input
-                    id="share-phone"
-                    type="tel"
-                    dir="ltr"
-                    className="input !min-h-[48px]"
-                    value={sharePhone}
-                    onChange={(e) => setSharePhone(e.target.value)}
-                    placeholder="050-0000000"
-                  />
-                  <div className="mt-3 flex gap-2 flex-wrap">
-                    <button className="btn btn-success" onClick={shareWhatsApp}>
-                      <SendIcon size={16} />
-                      שליחה בוואטסאפ
-                    </button>
-                    {typeof navigator !== "undefined" && !!navigator.share && (
-                      <button className="btn btn-outline" onClick={shareFile}>
-                        <UploadIcon size={16} />
-                        שיתוף הקובץ
-                      </button>
-                    )}
-                    <button
-                      className="btn btn-ghost"
-                      onClick={() => setSharePrompt(false)}
-                    >
-                      ביטול
                     </button>
                   </div>
                 </div>
