@@ -244,7 +244,7 @@ export default function ExceptionView({ backTo = "/home" }) {
       const name = log.projects?.contact_person || log.projects?.clients?.name || "לקוח";
       const project = log.projects?.name || "";
       const text = encodeURIComponent(
-        `שלום ${name}\n${signingUrl}\nמצורף קישור לאישור וחתימה על תוספת/חריגה בפרויקט ${project} - ענבר תעשיות פח`,
+        `שלום ${name}\nמצורף קישור לאישור וחתימה על תוספת/חריגה בפרויקט ${project}\n${signingUrl}\nענבר תעשיות פח`,
       );
       const phone = (log.projects?.phone || "").replace(/[^\d]/g, "").replace(/^0/, "972");
       if (phone) {
