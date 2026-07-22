@@ -218,8 +218,8 @@ export default function ExceptionView({ backTo = "/home" }) {
     setPdfBusy(true);
     setPdfError("");
     try {
-      const { generateExceptionPdf } = await import("../lib/pdf");
-      const blob = await generateExceptionPdf(log);
+      const { generateExceptionPdfV2 } = await import("../lib/pdfV2");
+      const blob = await generateExceptionPdfV2(log);
       const path = `exceptions/${log.id}/${crypto.randomUUID()}.pdf`;
       const { error: upErr } = await supabase.storage
         .from(EXCEPTION_DOC_BUCKET)
@@ -257,8 +257,8 @@ export default function ExceptionView({ backTo = "/home" }) {
     setSignError("");
     setSigningLink("");
     try {
-      const { generateExceptionPdf } = await import("../lib/pdf");
-      const blob = await generateExceptionPdf(log);
+      const { generateExceptionPdfV2 } = await import("../lib/pdfV2");
+      const blob = await generateExceptionPdfV2(log);
       const pdfBase64 = await blobToBase64(blob);
       const by = PROFILES[getProfile()] || "לא ידוע";
       const res = await fetch("/api/extras/send-for-signature", {
