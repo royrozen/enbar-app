@@ -290,14 +290,7 @@ export async function generateExceptionPdfV2(exception) {
     logoImage = { svg: MARK_SVG, width: 40 }
   }
 
-  // Serial number sits directly under the logo, left-aligned — separate
-  // from the title (which no longer carries the number).
-  const serialLine =
-    exception.exception_no != null
-      ? { text: rtl(`מס' סידורי: ${exception.exception_no}`), fontSize: 8, color: GREY, alignment: 'left', margin: [0, 4, 0, 0] }
-      : null
-
-  const logoBlock = { width: 110, stack: [logoImage, serialLine].filter(Boolean) }
+  const logoBlock = { width: 110, stack: [logoImage] }
 
   const photos = await photoStrip(exception.exception_photos)
 
@@ -352,7 +345,17 @@ export async function generateExceptionPdfV2(exception) {
                 color: GREY,
                 margin: [0, 3, 0, 0],
               },
-              { text: formatDate(todayISO()), fontSize: 8, color: GREY, margin: [0, 4, 0, 0] },
+              {
+                // Serial number + date share one row — serial on the left,
+                // date on the right (rightmost = last in the columns array).
+                columns: [
+                  exception.exception_no != null
+                    ? { width: '*', text: rtl(`מס' סידורי: ${exception.exception_no}`), fontSize: 8, color: GREY, alignment: 'left' }
+                    : { width: '*', text: '' },
+                  { width: 'auto', text: formatDate(todayISO()), fontSize: 8, color: GREY },
+                ],
+                margin: [0, 4, 0, 0],
+              },
             ],
             alignment: 'right',
           },
