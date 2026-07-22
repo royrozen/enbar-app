@@ -68,7 +68,7 @@ export default function ManagerDashboard() {
       let q = supabase
         .from('reports')
         .select(
-          'id, report_date, workers_count, issues, created_at, projects(name), team_leads(name), report_photos(id, storage_path, sort_order)',
+          'id, report_no, report_date, workers_count, issues, created_at, projects(name), team_leads(name), report_photos(id, storage_path, sort_order)',
         )
         .order('report_date', { ascending: false })
         .order('created_at', { ascending: false })
@@ -112,7 +112,7 @@ export default function ManagerDashboard() {
   const visibleReports = !q
     ? reports
     : (reports || []).filter((r) => {
-        const haystack = `${r.projects?.name || ''} ${r.team_leads?.name || ''} ${formatDate(r.report_date)}`
+        const haystack = `${r.projects?.name || ''} ${r.team_leads?.name || ''} ${formatDate(r.report_date)} ${r.report_no ?? ''} #${r.report_no ?? ''}`
         return haystack.includes(q)
       })
 
@@ -238,7 +238,7 @@ export default function ManagerDashboard() {
           <input
             type="text"
             className="input !ps-10"
-            placeholder="חיפוש דוח לפי פרויקט, ראש צוות או תאריך..."
+            placeholder="חיפוש דוח לפי פרויקט, ראש צוות, תאריך או מספר דוח..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -277,6 +277,9 @@ export default function ManagerDashboard() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold truncate">{r.projects?.name || 'פרויקט'}</span>
+                        {r.report_no != null && (
+                          <span className="text-xs text-primary">#{r.report_no}</span>
+                        )}
                         <span className="text-sm text-primary">{formatDate(r.report_date)}</span>
                       </div>
                       <p className="text-sm text-primary mt-1 flex items-center gap-3 flex-wrap">

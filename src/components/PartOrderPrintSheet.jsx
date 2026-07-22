@@ -50,6 +50,7 @@ export default function PartOrderPrintSheet({ order, onClose }) {
             <dt className="font-bold text-gray-600">פרויקט:</dt>
             <dd>
               {project.name || '—'}
+              {project.project_code ? ` (${project.project_code})` : ''}
               {project.city ? ` — ${project.city}` : ''}
               {project.clients?.name ? ` · ${project.clients.name}` : ''}
             </dd>

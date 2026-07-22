@@ -187,7 +187,7 @@ function ProjectForm({ form, setForm, error, busy, onSubmit, onCancel, submitLab
 function ClientsTab() {
   const { items, error, setError, load, toggleActive, softDelete } = useAdminList(
     'clients',
-    '*, projects(id, name, city, contact_person, phone, email, is_active, deleted_at)',
+    '*, projects(id, name, city, contact_person, phone, email, is_active, deleted_at, project_code)',
   )
   const [showAdd, setShowAdd] = useState(false)
   const [addForm, setAddForm] = useState({ name: '', registration_number: '' })
@@ -454,6 +454,9 @@ function ClientsTab() {
                       <div className="flex-1 min-w-0">
                         <p className="font-bold truncate">
                           {c.name}
+                          {c.client_no != null && (
+                            <span className="text-xs text-primary font-normal ms-2">לקוח #{c.client_no}</span>
+                          )}
                           {!c.is_active && <span className="text-xs text-primary font-normal ms-2">(מושבת)</span>}
                         </p>
                         <p className="text-sm text-primary truncate">
@@ -507,6 +510,9 @@ function ClientsTab() {
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold text-sm truncate">
                               {p.name}
+                              {p.project_code && (
+                                <span className="text-xs text-primary font-normal"> (<span dir="ltr">{p.project_code}</span>)</span>
+                              )}
                               {!p.is_active && <span className="text-xs text-primary font-normal ms-2">(מושבת)</span>}
                             </p>
                             <p className="text-xs text-primary truncate">

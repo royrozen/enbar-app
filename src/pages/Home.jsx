@@ -41,7 +41,7 @@ export default function Home() {
         await Promise.all([
           supabase
             .from('reports')
-            .select('id, report_date, workers_count, issues, created_at, projects(name), report_photos(id)')
+            .select('id, report_no, report_date, workers_count, issues, created_at, projects(name), report_photos(id)')
             .eq('team_lead_id', activeLead.id)
             .order('report_date', { ascending: false })
             .order('created_at', { ascending: false })
@@ -179,7 +179,12 @@ export default function Home() {
                       <span className="text-sm font-black">היום</span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-bold truncate">{r.projects?.name || 'פרויקט'}</p>
+                      <p className="font-bold truncate">
+                        {r.projects?.name || 'פרויקט'}
+                        {r.report_no != null && (
+                          <span className="text-xs text-primary font-normal ms-2">#{r.report_no}</span>
+                        )}
+                      </p>
                       <p className="text-sm text-primary flex items-center gap-2 mt-0.5">
                         <ImageIcon size={15} />
                         {r.report_photos?.length || 0} תמונות

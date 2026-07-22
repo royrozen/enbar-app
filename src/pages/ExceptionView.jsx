@@ -351,6 +351,9 @@ export default function ExceptionView({ backTo = "/home" }) {
                   <h1 className="text-xl font-black flex items-center gap-2">
                     <AlertIcon size={20} className="text-accent shrink-0" />
                     {log.projects?.name}
+                    {log.exception_no != null && (
+                      <span className="text-sm text-primary font-normal">#{log.exception_no}</span>
+                    )}
                   </h1>
                   <p className="text-sm text-primary mt-0.5">
                     לקוח: {log.projects?.clients?.name || "—"}

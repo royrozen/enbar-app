@@ -20,7 +20,7 @@ const PART_STATUS_CHIPS = [
 ]
 
 const PART_ORDER_SELECT =
-  'id, status, status_updated_by, notes, created_at, projects(name, city, clients(name)), team_leads(name), part_requests(id, quantity, catalog_item_id, other_description, catalog_items(name))'
+  'id, status, status_updated_by, notes, created_at, projects(name, city, project_code, clients(name)), team_leads(name), part_requests(id, quantity, catalog_item_id, other_description, catalog_items(name))'
 
 export default function ManagerParts() {
   const [projects, setProjects] = useState([])

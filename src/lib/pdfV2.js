@@ -331,7 +331,19 @@ export async function generateExceptionPdfV2(exception) {
           {
             width: '*',
             stack: [
-              { text: rtl('אישור תוספת / חריגה'), fontSize: 18, bold: true, color: NAVY },
+              {
+                // One rtl() call over the combined title+number string — see
+                // the billable-days stat line below for why label/number
+                // can't be split across separate rtl() calls.
+                text: rtl(
+                  exception.exception_no != null
+                    ? `אישור תוספת / חריגה — חריגה #${exception.exception_no}`
+                    : 'אישור תוספת / חריגה',
+                ),
+                fontSize: 18,
+                bold: true,
+                color: NAVY,
+              },
               {
                 text: rtl('אישור לקוח לביצוע עבודה נוספת שאינה כלולה בהזמנה המקורית'),
                 fontSize: 8,

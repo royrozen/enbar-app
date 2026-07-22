@@ -37,7 +37,7 @@ export default function ManagerExceptions() {
     try {
       let q = supabase
         .from('exception_logs')
-        .select('id, workers_count, work_days, billable_days, days_overridden, status, created_at, projects(name, clients(name)), team_leads(name)')
+        .select('id, exception_no, workers_count, work_days, billable_days, days_overridden, status, created_at, projects(name, clients(name)), team_leads(name)')
         .order('created_at', { ascending: false })
         .limit(200)
       if (filters.status) q = q.eq('status', filters.status)
@@ -164,6 +164,9 @@ export default function ManagerExceptions() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold truncate">{l.projects?.name}</span>
+                        {l.exception_no != null && (
+                          <span className="text-xs text-primary">#{l.exception_no}</span>
+                        )}
                         <span className="text-sm text-primary">{l.projects?.clients?.name}</span>
                       </div>
                       <p className="text-sm text-primary mt-1 flex items-center gap-3 flex-wrap">

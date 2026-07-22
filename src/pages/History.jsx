@@ -34,6 +34,7 @@ export default function History() {
   const [exceptions, setExceptions] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [reportNoSearch, setReportNoSearch] = useState('')
 
   const loadMeta = useCallback(async () => {
     const [activeLead, { data: projs }] = await Promise.all([
@@ -52,7 +53,7 @@ export default function History() {
     try {
       let reportsQ = supabase
         .from('reports')
-        .select('id, report_date, workers_count, issues, created_at, projects(name)')
+        .select('id, report_no, report_date, workers_count, issues, created_at, projects(name)')
         .eq('team_lead_id', activeLead.id)
         .order('report_date', { ascending: false })
         .order('created_at', { ascending: false })
@@ -121,7 +122,11 @@ export default function History() {
   const unified = [...reportItems, ...partItems, ...exceptionItems].sort(
     (a, b) => new Date(b.ts) - new Date(a.ts),
   )
-  const visible = filters.type ? unified.filter((u) => u.type === filters.type) : unified
+  const typeFiltered = filters.type ? unified.filter((u) => u.type === filters.type) : unified
+  const q = reportNoSearch.trim()
+  const visible = !q
+    ? typeFiltered
+    : typeFiltered.filter((u) => u.type === 'report' && String(u.report.report_no ?? '').includes(q))
 
   return (
     <div className="min-h-dvh">
@@ -172,6 +177,18 @@ export default function History() {
               onChange={(e) => setFilters((f) => ({ ...f, to: e.target.value }))}
             />
           </div>
+          <div className="sm:col-span-2 min-w-0">
+            <label className="label !text-xs" htmlFor="f-report-no">חיפוש לפי מספר דוח</label>
+            <input
+              id="f-report-no"
+              type="text"
+              inputMode="numeric"
+              className="input !min-h-[48px] w-full min-w-0"
+              placeholder="לדוגמה: 245"
+              value={reportNoSearch}
+              onChange={(e) => setReportNoSearch(e.target.value)}
+            />
+          </div>
         </div>
 
         {error && (
@@ -209,7 +226,12 @@ export default function History() {
                         <span className="text-sm font-black">{formatDate(r.report_date)}</span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-bold truncate">{r.projects?.name || 'פרויקט'}</p>
+                        <p className="font-bold truncate">
+                          {r.projects?.name || 'פרויקט'}
+                          {r.report_no != null && (
+                            <span className="text-xs text-primary font-normal ms-2">#{r.report_no}</span>
+                          )}
+                        </p>
                         <p className="text-sm text-primary flex items-center gap-2 mt-0.5">
                           <ImageIcon size={15} />
                           {r.issues && (
