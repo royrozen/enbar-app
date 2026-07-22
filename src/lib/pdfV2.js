@@ -282,13 +282,22 @@ export async function generateExceptionPdfV2(exception) {
   const days = Number(exception.billable_days)
   const daysText = `${days % 1 === 0 ? days : days.toFixed(1)} ימי עבודה`
 
-  let logoBlock
+  let logoImage
   try {
     const logo = await fetchLogoDataUrl()
-    logoBlock = { image: logo, width: 110 }
+    logoImage = { image: logo, width: 110 }
   } catch {
-    logoBlock = { svg: MARK_SVG, width: 40 }
+    logoImage = { svg: MARK_SVG, width: 40 }
   }
+
+  // Serial number sits directly under the logo, left-aligned — separate
+  // from the title (which no longer carries the number).
+  const serialLine =
+    exception.exception_no != null
+      ? { text: rtl(`מס' סידורי: ${exception.exception_no}`), fontSize: 8, color: GREY, alignment: 'left', margin: [0, 4, 0, 0] }
+      : null
+
+  const logoBlock = { width: 110, stack: [logoImage, serialLine].filter(Boolean) }
 
   const photos = await photoStrip(exception.exception_photos)
 
@@ -332,14 +341,7 @@ export async function generateExceptionPdfV2(exception) {
             width: '*',
             stack: [
               {
-                // One rtl() call over the combined title+number string — see
-                // the billable-days stat line below for why label/number
-                // can't be split across separate rtl() calls.
-                text: rtl(
-                  exception.exception_no != null
-                    ? `אישור תוספת / חריגה — חריגה #${exception.exception_no}`
-                    : 'אישור תוספת / חריגה',
-                ),
+                text: rtl('אישור עבודה נוספת ע״פ יומן עבודה'),
                 fontSize: 18,
                 bold: true,
                 color: NAVY,
