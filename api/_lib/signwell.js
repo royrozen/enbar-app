@@ -18,14 +18,15 @@ const API_BASE = 'https://www.signwell.com/api/v1'
 // (≈1.3333) to compensate. If SignWell ever fixes this on their end, these
 // will need dividing back down by that same factor.
 //
-// Re-measured after ANCHOR_Y moved (450→470) and the approvalBlock's
-// internal margins were trimmed to make room for the up-to-3-photo strip
-// in pdfV2.js — x values are unchanged (only vertical spacing shifted).
+// Re-measured after ANCHOR_Y moved (470→505) and the billable-days stat box
+// was shrunk to a single compact line, making room for larger photoStrip()
+// thumbnails in pdfV2.js — x values are unchanged (only vertical spacing
+// shifted).
 const PT_TO_SIGNWELL_PX = 96 / 72
 const rawFieldsPt = {
-  fullName: { x: 290, y: 678, width: 199, height: 18 },
-  signature: { x: 368, y: 716, width: 184, height: 42 },
-  dateSigned: { x: 43, y: 678, width: 114, height: 18 },
+  fullName: { x: 290, y: 663, width: 199, height: 18 },
+  signature: { x: 368, y: 700, width: 184, height: 42 },
+  dateSigned: { x: 43, y: 663, width: 114, height: 18 },
 }
 export const SIGNWELL_FIELDS = Object.fromEntries(
   Object.entries(rawFieldsPt).map(([name, f]) => [

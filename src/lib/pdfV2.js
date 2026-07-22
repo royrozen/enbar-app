@@ -64,8 +64,8 @@ async function fetchPhotoDataUrl(url) {
   })
 }
 
-const PHOTO_CELL_W = 158
-const PHOTO_CELL_H = 58
+const PHOTO_CELL_W = 160
+const PHOTO_CELL_H = 92
 
 // Up to 3 photos side by side, sorted the same way as the on-screen gallery
 // (ExceptionView.jsx). Skips photos that fail to fetch rather than failing
@@ -127,7 +127,7 @@ const CONTENT_WIDTH = 515
 // ANCHOR_Y or the internal layout below change, SIGNWELL_FIELDS in
 // api/_lib/signwell.js must be re-measured to match.
 const ANCHOR_X = 40
-const ANCHOR_Y = 470
+const ANCHOR_Y = 505
 
 // One label-over-value cell for the details strip.
 function detailCell(label, value) {
@@ -146,18 +146,23 @@ function approvalBlock(daysText) {
     absolutePosition: { x: ANCHOR_X, y: ANCHOR_Y },
     width: CONTENT_WIDTH,
     stack: [
-      // Billable-days stat line.
+      // Billable-days stat line — compact single row (shrunk to make room
+      // for the larger photoStrip() thumbnails above this pinned block).
       {
         table: {
           widths: ['*'],
           body: [
             [
               {
-                stack: [
-                  { text: rtl('ימי עבודה לחיוב'), fontSize: 9, color: GREY, alignment: 'center' },
-                  { text: rtl(daysText), fontSize: 20, bold: true, color: NAVY, alignment: 'center', margin: [0, 2, 0, 0] },
-                ],
-                margin: [0, 10, 0, 10],
+                // One rtl() call over the combined string — splitting label
+                // and value into separate rtl() calls (for different colors)
+                // would break its word/digit-run reversal, which only works
+                // correctly across a single call.
+                text: rtl(`ימי עבודה לחיוב: ${daysText}`),
+                fontSize: 12,
+                bold: true,
+                color: NAVY,
+                alignment: 'center',
               },
             ],
           ],
@@ -168,8 +173,10 @@ function approvalBlock(daysText) {
           hLineColor: () => NAVY,
           vLineColor: () => NAVY,
           fillColor: () => PALE,
+          paddingTop: () => 5,
+          paddingBottom: () => 5,
         },
-        margin: [0, 0, 0, 10],
+        margin: [0, 0, 0, 8],
       },
 
       // Declaration.
