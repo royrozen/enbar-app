@@ -300,7 +300,7 @@ export default function ExceptionView({ backTo = "/home" }) {
   function shareSignedDocWhatsApp() {
     const url = signedDocUrl(log.signed_path);
     const text = encodeURIComponent(
-      `שלום, מצורף המסמך החתום לאישור חריגים ותוספות מענבר תעשיות פח:\n${url}`,
+      `שלום, מצורף המסמך החתום לאישור עבודה נוספת מענבר תעשיות פח:\n${url}`,
     );
     const phone = sharePhone.replace(/[^\d]/g, "").replace(/^0/, "972");
     const wa = phone
@@ -356,7 +356,7 @@ export default function ExceptionView({ backTo = "/home" }) {
     <div className={`min-h-dvh ${editing ? "pb-32" : ""}`}>
       <Header
         backTo={backTo}
-        title={editing ? "עריכת יומן חריגים" : "יומן חריגים"}
+        title={editing ? "עריכת אישור עבודה נוספת" : "אישור עבודה נוספת"}
       />
       <main className="mx-auto max-w-3xl px-4 py-6">
         {error && (
@@ -547,7 +547,7 @@ export default function ExceptionView({ backTo = "/home" }) {
                 <p className="text-xs text-primary mb-3">
                   {log.pdf_path || log.signed_path
                     ? "העלאת המסמך החתום מסמנת את היומן כ״אושר ע״י הלקוח״ ונועלת אותו"
-                    : "יש להפיק קודם את דוח החריגים — רק אחרי הפקה ושליחה ללקוח ניתן להעלות מסמך חתום"}
+                    : "יש להפיק קודם את דוח אישור העבודה הנוספת — רק אחרי הפקה ושליחה ללקוח ניתן להעלות מסמך חתום"}
                 </p>
                 {log.signed_path ? (
                   <div className="flex items-center gap-3 flex-wrap">
@@ -580,7 +580,7 @@ export default function ExceptionView({ backTo = "/home" }) {
                         ? "opacity-50 pointer-events-none"
                         : ""
                     }`}
-                    title={!log.pdf_path ? "יש להפיק קודם את דוח החריגים" : ""}
+                    title={!log.pdf_path ? "יש להפיק קודם את דוח אישור העבודה הנוספת" : ""}
                   >
                     {docUploading ? (
                       <SpinnerIcon size={18} />

@@ -70,10 +70,10 @@ export default function ManagerExceptions() {
 
   return (
     <div className="min-h-dvh">
-      <Header backTo="/manager" title="יומני חריגים" />
+      <Header backTo="/manager" title="אישורי עבודה נוספת" />
       <main className="mx-auto max-w-5xl px-4 py-6">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h1 className="text-2xl font-black">יומני חריגים</h1>
+          <h1 className="text-2xl font-black">אישורי עבודה נוספת</h1>
           <button className="btn btn-ghost text-sm" onClick={refresh} disabled={loading}>
             <RefreshIcon size={18} className={loading ? 'spin' : ''} />
             רענון
@@ -144,7 +144,7 @@ export default function ManagerExceptions() {
         ) : logs.length === 0 ? (
           <div className="card p-10 mt-4 text-center text-primary">
             <AlertIcon size={40} className="mx-auto mb-3 opacity-60" />
-            <p className="font-bold text-foreground">לא נמצאו יומני חריגים</p>
+            <p className="font-bold text-foreground">לא נמצאו אישורי עבודה נוספת</p>
             <p className="text-sm mt-1">נסו להרחיב את טווח התאריכים או לאפס את המסננים</p>
           </div>
         ) : (

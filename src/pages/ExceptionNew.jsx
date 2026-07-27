@@ -239,9 +239,9 @@ export default function ExceptionNew() {
 
   return (
     <div className="min-h-dvh pb-32">
-      <Header backTo="/home" title="יומן חריגים" />
+      <Header backTo="/home" title="אישור עבודה נוספת" />
       <main className="mx-auto max-w-lg px-4 py-6">
-        <h1 className="text-2xl font-black mb-5 sm:hidden">יומן חריגים</h1>
+        <h1 className="text-2xl font-black mb-5 sm:hidden">אישור עבודה נוספת</h1>
 
         {loadError && (
           <div className="card border-destructive/40 bg-red-50 p-4 mb-5 text-destructive font-medium flex items-start gap-2">

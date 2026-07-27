@@ -12,7 +12,7 @@ const TYPE_CHIPS = [
   { value: '', label: 'הכל' },
   { value: 'report', label: 'יומן עבודה' },
   { value: 'part', label: 'הזמנת חלקים' },
-  { value: 'exception', label: 'יומן חריגים' },
+  { value: 'exception', label: 'אישור עבודה נוספת' },
 ]
 
 const defaultFilters = () => ({
@@ -262,7 +262,7 @@ export default function History() {
                       <div className="flex-1 min-w-0">
                         <p className="font-bold truncate">{ex.projects?.name || 'פרויקט'}</p>
                         <p className="text-sm text-primary mt-0.5">
-                          יומן חריגים · {d % 1 === 0 ? d : d.toFixed(1)} ימי חיוב
+                          אישור עבודה נוספת · {d % 1 === 0 ? d : d.toFixed(1)} ימי חיוב
                         </p>
                       </div>
                       <StatusBadge status={ex.status} />

@@ -12,7 +12,7 @@ const TYPE_CHIPS = [
   { value: '', label: 'הכל' },
   { value: 'report', label: 'יומן עבודה' },
   { value: 'part', label: 'הזמנת חלקים' },
-  { value: 'exception', label: 'יומן חריגים' },
+  { value: 'exception', label: 'אישור עבודה נוספת' },
 ]
 
 const PART_ORDER_SELECT =
@@ -121,7 +121,7 @@ export default function Home() {
             className="card p-4 flex flex-col items-center justify-center gap-2 text-center hover:border-accent transition-colors duration-200"
           >
             <AlertIcon size={26} className="text-accent" />
-            <span className="text-sm font-bold">יומן חריגים</span>
+            <span className="text-sm font-bold">אישור עבודה נוספת</span>
           </Link>
         </div>
 
@@ -216,7 +216,7 @@ export default function Home() {
                     <div className="flex-1 min-w-0">
                       <p className="font-bold truncate">{ex.projects?.name || 'פרויקט'}</p>
                       <p className="text-sm text-primary mt-0.5">
-                        יומן חריגים · {d % 1 === 0 ? d : d.toFixed(1)} ימי חיוב
+                        אישור עבודה נוספת · {d % 1 === 0 ? d : d.toFixed(1)} ימי חיוב
                       </p>
                     </div>
                     <StatusBadge status={ex.status} />

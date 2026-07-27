@@ -149,7 +149,7 @@ export default function ManagerDashboard() {
               <p className="text-3xl font-black leading-none text-accent">
                 {stats.pendingExceptions ?? '—'}
               </p>
-              <p className="text-sm text-primary mt-1">יומני חריגים ממתינים — לחצו לצפייה</p>
+              <p className="text-sm text-primary mt-1">אישורי עבודה נוספת ממתינים — לחצו לצפייה</p>
             </div>
           </Link>
           <Link to="/manager/parts" className="card p-4 flex items-center gap-4 hover:border-accent transition-colors duration-200">
