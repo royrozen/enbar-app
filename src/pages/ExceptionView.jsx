@@ -58,6 +58,10 @@ export default function ExceptionView({ backTo = "/home" }) {
   const [docUploading, setDocUploading] = useState(false);
   const [docError, setDocError] = useState("");
 
+  // PDF generation (review step, before sending)
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfError, setPdfError] = useState("");
+
   // SignWell e-signature send
   const [signBusy, setSignBusy] = useState(false);
   const [signError, setSignError] = useState("");
@@ -144,7 +148,10 @@ export default function ExceptionView({ backTo = "/home" }) {
 
     setSaving(true);
     try {
-      // Any edit invalidates whatever was already sent — back to ממתין.
+      // Any edit invalidates whatever was already sent — back to ממתין,
+      // and the previously-generated PDF no longer matches the data, so
+      // clear pdf_path too (hides the stale "צפייה בדוח" link/send button
+      // until a fresh PDF is generated from the edited content).
       const by = PROFILES[getProfile()] || "לא ידוע";
       const { error: updErr } = await supabase
         .from("exception_logs")
@@ -156,6 +163,7 @@ export default function ExceptionView({ backTo = "/home" }) {
           days_overridden: daysOverridden,
           status: "pending",
           status_updated_by: by,
+          pdf_path: null,
         })
         .eq("id", log.id);
       if (updErr) throw updErr;
@@ -204,16 +212,14 @@ export default function ExceptionView({ backTo = "/home" }) {
     });
   }
 
-  // The one send action: generates the PDF, uploads it (pdf_path — also
-  // gates the signed-document upload below), sends it to SignWell for
-  // signature, then opens WhatsApp with the signing link. Safe to click
-  // again after "sent" — creates a fresh SignWell document each time,
-  // same as re-generating did before this was merged into one button.
-  async function sendForSignature() {
-    if (!log || signBusy || locked) return;
-    setSignBusy(true);
-    setSignError("");
-    setSigningLink("");
+  // Step 1: generate the PDF, upload it (sets pdf_path), open it for
+  // review. Does not send anything yet — the send button only appears
+  // once pdf_path exists (see JSX below), so the manager always reviews
+  // the actual generated document before it goes to the client.
+  async function generatePdf() {
+    if (!log || pdfBusy || locked) return;
+    setPdfBusy(true);
+    setPdfError("");
     try {
       const { generateExceptionPdfV2 } = await import("../lib/pdfV2");
       const blob = await generateExceptionPdfV2(log);
@@ -224,6 +230,34 @@ export default function ExceptionView({ backTo = "/home" }) {
         .upload(path, blob, { contentType: "application/pdf" });
       if (upErr) throw upErr;
 
+      const { error: updErr } = await supabase
+        .from("exception_logs")
+        .update({ pdf_path: path })
+        .eq("id", log.id);
+      if (updErr) throw updErr;
+      setLog((l) => ({ ...l, pdf_path: path }));
+
+      const url = supabase.storage.from(EXCEPTION_DOC_BUCKET).getPublicUrl(path).data.publicUrl;
+      window.open(url, "_blank");
+    } catch {
+      setPdfError("הפקת הדוח נכשלה — נסו שוב");
+    } finally {
+      setPdfBusy(false);
+    }
+  }
+
+  // Step 2: send the already-generated, already-reviewed PDF (log.pdf_path)
+  // to SignWell for signature, then open WhatsApp with the signing link.
+  // Only enabled once a PDF exists. Safe to click again after "sent" —
+  // creates a fresh SignWell document each time, same file.
+  async function sendForSignature() {
+    if (!log || signBusy || locked || !log.pdf_path) return;
+    setSignBusy(true);
+    setSignError("");
+    setSigningLink("");
+    try {
+      const res0 = await fetch(exceptionDocPublicUrl());
+      const blob = await res0.blob();
       const pdfBase64 = await blobToBase64(blob);
       const by = PROFILES[getProfile()] || "לא ידוע";
       const res = await fetch("/api/extras/send-for-signature", {
@@ -233,12 +267,6 @@ export default function ExceptionView({ backTo = "/home" }) {
       });
       if (!res.ok) throw new Error("send failed");
       const { signingUrl } = await res.json();
-
-      const { error: updErr } = await supabase
-        .from("exception_logs")
-        .update({ pdf_path: path })
-        .eq("id", log.id);
-      if (updErr) throw updErr;
       await refresh();
 
       const name = log.projects?.contact_person || log.projects?.clients?.name || "לקוח";
@@ -456,17 +484,32 @@ export default function ExceptionView({ backTo = "/home" }) {
                 </div>
               </div>
 
-              <button
-                type="button"
-                className="btn btn-accent w-full sm:w-auto"
-                onClick={sendForSignature}
-                disabled={signBusy || locked}
-              >
-                {signBusy ? <SpinnerIcon size={18} /> : <SendIcon size={18} />}
-                {log.status === "sent"
-                  ? "שליחה חוזרת לחתימה"
-                  : "הפקת דוח ושליחה לחתימה"}
-              </button>
+              {!log.pdf_path && (
+                <button
+                  type="button"
+                  className="btn btn-accent w-full sm:w-auto"
+                  onClick={generatePdf}
+                  disabled={pdfBusy || locked}
+                >
+                  {pdfBusy ? <SpinnerIcon size={18} /> : <FileTextIcon size={18} />}
+                  הפקת דוח לבדיקה
+                </button>
+              )}
+              {pdfError && <p className="err">{pdfError}</p>}
+
+              {log.pdf_path && (
+                <button
+                  type="button"
+                  className="btn btn-accent w-full sm:w-auto"
+                  onClick={sendForSignature}
+                  disabled={signBusy || locked}
+                >
+                  {signBusy ? <SpinnerIcon size={18} /> : <SendIcon size={18} />}
+                  {log.status === "sent"
+                    ? "שליחה חוזרת לחתימה"
+                    : "שליחה לחתימה"}
+                </button>
+              )}
               {signError && <p className="err">{signError}</p>}
 
               {log.status === "sent" && (
