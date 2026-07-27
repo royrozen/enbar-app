@@ -388,7 +388,18 @@ export default function ExceptionView({ backTo = "/home" }) {
                     {log.projects?.city ? ` · ${log.projects.city}` : ""}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {log.pdf_path && (
+                    <a
+                      href={exceptionDocPublicUrl()}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm font-bold text-accent underline inline-flex items-center gap-1"
+                    >
+                      <FileTextIcon size={14} />
+                      צפייה בדוח
+                    </a>
+                  )}
                   <StatusBadge status={log.status} size="lg" />
                   {!locked && (
                     <button
@@ -462,146 +473,132 @@ export default function ExceptionView({ backTo = "/home" }) {
               )}
             </section>
 
-            {/* Send to client — disabled once the client's signed doc is in */}
-            <section
-              className={`card p-5 ${locked ? "opacity-50 pointer-events-none" : ""}`}
-            >
-              <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
-                <h2 className="font-bold">דוח לאישור הלקוח</h2>
-                <div className="flex items-center gap-3">
-                  <StatusBadge status={log.status} />
-                  {log.pdf_path && (
-                    <a
-                      href={exceptionDocPublicUrl()}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-sm font-bold text-accent underline inline-flex items-center gap-1"
-                    >
-                      <FileTextIcon size={14} />
-                      צפייה בדוח
-                    </a>
-                  )}
-                </div>
+            {/* Consolidated actions — one primary CTA at a time (generate → send → upload) */}
+            <section className="card p-5">
+              <h2 className="font-bold mb-3">פעולות</h2>
+
+              <div className={`flex flex-col gap-3 ${locked ? "opacity-50 pointer-events-none" : ""}`}>
+                {!log.pdf_path && (
+                  <button
+                    type="button"
+                    className="btn btn-accent w-full sm:w-auto"
+                    onClick={generatePdf}
+                    disabled={pdfBusy || locked}
+                  >
+                    {pdfBusy ? <SpinnerIcon size={18} /> : <FileTextIcon size={18} />}
+                    הפקת דוח לבדיקה
+                  </button>
+                )}
+                {pdfError && <p className="err !mt-0">{pdfError}</p>}
+
+                {log.pdf_path && (
+                  <button
+                    type="button"
+                    className={`btn w-full sm:w-auto ${log.status === "sent" ? "btn-outline" : "btn-accent"}`}
+                    onClick={sendForSignature}
+                    disabled={signBusy || locked}
+                  >
+                    {signBusy ? <SpinnerIcon size={18} /> : <SendIcon size={18} />}
+                    {log.status === "sent"
+                      ? "שליחה חוזרת לחתימה"
+                      : "שליחה לחתימה"}
+                  </button>
+                )}
+                {signError && <p className="err !mt-0">{signError}</p>}
+
+                {log.status === "sent" && (
+                  <p className="text-sm font-bold text-blue-800">
+                    נשלח לחתימה — ממתין לחתימת הלקוח
+                  </p>
+                )}
+
+                {signingLink && (
+                  <div className="rounded-xl border-2 border-accent/40 bg-muted p-4">
+                    <p className="font-bold text-sm mb-2">
+                      ללקוח אין מספר וואטסאפ שמור — אפשר להעתיק את קישור החתימה ולשלוח ידנית
+                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <input
+                        type="text"
+                        dir="ltr"
+                        readOnly
+                        value={signingLink}
+                        className="input !min-h-[44px] flex-1 min-w-0 text-sm"
+                        onFocus={(e) => e.target.select()}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-outline"
+                        onClick={copySigningLink}
+                      >
+                        <ClipboardIcon size={16} />
+                        {linkCopied ? "הועתק!" : "העתקת קישור"}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {!log.pdf_path && (
-                <button
-                  type="button"
-                  className="btn btn-accent w-full sm:w-auto"
-                  onClick={generatePdf}
-                  disabled={pdfBusy || locked}
-                >
-                  {pdfBusy ? <SpinnerIcon size={18} /> : <FileTextIcon size={18} />}
-                  הפקת דוח לבדיקה
-                </button>
-              )}
-              {pdfError && <p className="err">{pdfError}</p>}
-
-              {log.pdf_path && (
-                <button
-                  type="button"
-                  className="btn btn-accent w-full sm:w-auto"
-                  onClick={sendForSignature}
-                  disabled={signBusy || locked}
-                >
-                  {signBusy ? <SpinnerIcon size={18} /> : <SendIcon size={18} />}
-                  {log.status === "sent"
-                    ? "שליחה חוזרת לחתימה"
-                    : "שליחה לחתימה"}
-                </button>
-              )}
-              {signError && <p className="err">{signError}</p>}
-
-              {log.status === "sent" && (
-                <p className="mt-2 text-sm font-bold text-blue-800">
-                  נשלח לחתימה — ממתין לחתימת הלקוח
+              {/* Signed form — disabled until a PDF has been generated at least once */}
+              <div
+                className={`mt-5 pt-5 border-t border-border ${!log.pdf_path && !log.signed_path ? "opacity-60" : ""}`}
+              >
+                <h2 className="font-bold mb-1">המסמך החתום מהלקוח</h2>
+                <p className="text-xs text-primary mb-3">
+                  {log.pdf_path || log.signed_path
+                    ? "העלאת המסמך החתום מסמנת את היומן כ״אושר ע״י הלקוח״ ונועלת אותו"
+                    : "יש להפיק קודם את דוח החריגים — רק אחרי הפקה ושליחה ללקוח ניתן להעלות מסמך חתום"}
                 </p>
-              )}
-
-              {signingLink && (
-                <div className="mt-3 rounded-xl border-2 border-accent/40 bg-muted p-4">
-                  <p className="font-bold text-sm mb-2">
-                    ללקוח אין מספר וואטסאפ שמור — אפשר להעתיק את קישור החתימה ולשלוח ידנית
-                  </p>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <input
-                      type="text"
-                      dir="ltr"
-                      readOnly
-                      value={signingLink}
-                      className="input !min-h-[44px] flex-1 min-w-0 text-sm"
-                      onFocus={(e) => e.target.select()}
-                    />
-                    <button
-                      type="button"
+                {log.signed_path ? (
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <a
+                      href={signedDocUrl(log.signed_path)}
+                      target="_blank"
+                      rel="noreferrer"
                       className="btn btn-outline"
-                      onClick={copySigningLink}
                     >
-                      <ClipboardIcon size={16} />
-                      {linkCopied ? "הועתק!" : "העתקת קישור"}
-                    </button>
+                      <FileTextIcon size={18} />
+                      צפייה במסמך החתום
+                    </a>
+                    {log.status === "approved" && (
+                      <button
+                        type="button"
+                        className="btn btn-success"
+                        onClick={shareSignedDocWhatsApp}
+                      >
+                        <SendIcon size={16} />
+                        שליחה בוואטסאפ
+                      </button>
+                    )}
                   </div>
-                </div>
-              )}
-            </section>
-
-            {/* Signed form — disabled until a PDF has been generated at least once */}
-            <section
-              className={`card p-5 ${!log.pdf_path && !log.signed_path ? "opacity-60" : ""}`}
-            >
-              <h2 className="font-bold mb-1">המסמך החתום מהלקוח</h2>
-              <p className="text-xs text-primary mb-3">
-                {log.pdf_path || log.signed_path
-                  ? "העלאת המסמך החתום מסמנת את היומן כ״אושר ע״י הלקוח״ ונועלת אותו"
-                  : "יש להפיק קודם את דוח החריגים — רק אחרי הפקה ושליחה ללקוח ניתן להעלות מסמך חתום"}
-              </p>
-              {log.signed_path ? (
-                <div className="flex items-center gap-3 flex-wrap">
-                  <a
-                    href={signedDocUrl(log.signed_path)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn btn-outline"
+                ) : (
+                  <label
+                    className={`btn w-full sm:w-auto cursor-pointer ${
+                      log.status === "sent" ? "btn-accent" : "btn-outline"
+                    } ${
+                      locked || !log.pdf_path
+                        ? "opacity-50 pointer-events-none"
+                        : ""
+                    }`}
+                    title={!log.pdf_path ? "יש להפיק קודם את דוח החריגים" : ""}
                   >
-                    <FileTextIcon size={18} />
-                    צפייה במסמך החתום
-                  </a>
-                  {log.status === "approved" && (
-                    <button
-                      type="button"
-                      className="btn btn-success"
-                      onClick={shareSignedDocWhatsApp}
-                    >
-                      <SendIcon size={16} />
-                      שליחה בוואטסאפ
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <label
-                  className={`btn btn-accent w-full sm:w-auto cursor-pointer ${
-                    locked || !log.pdf_path
-                      ? "opacity-50 pointer-events-none"
-                      : ""
-                  }`}
-                  title={!log.pdf_path ? "יש להפיק קודם את דוח החריגים" : ""}
-                >
-                  {docUploading ? (
-                    <SpinnerIcon size={18} />
-                  ) : (
-                    <UploadIcon size={18} />
-                  )}
-                  העלאת המסמך החתום
-                  <input
-                    type="file"
-                    accept="application/pdf,image/*"
-                    className="hidden"
-                    onChange={uploadSignedDoc}
-                    disabled={docUploading || locked || !log.pdf_path}
-                  />
-                </label>
-              )}
-              {docError && <p className="err">{docError}</p>}
+                    {docUploading ? (
+                      <SpinnerIcon size={18} />
+                    ) : (
+                      <UploadIcon size={18} />
+                    )}
+                    העלאת המסמך החתום
+                    <input
+                      type="file"
+                      accept="application/pdf,image/*"
+                      className="hidden"
+                      onChange={uploadSignedDoc}
+                      disabled={docUploading || locked || !log.pdf_path}
+                    />
+                  </label>
+                )}
+                {docError && <p className="err">{docError}</p>}
+              </div>
             </section>
           </div>
         )}
