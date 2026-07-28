@@ -40,7 +40,7 @@ Today every table's RLS policy is `using (true)` for `anon, authenticated` — a
 | `part_requests` | via own order | via own order | via own order, while pending | all | — | all |
 | `catalog_items` | active only | — | — | all | ✓ | ✓ |
 
-No `DELETE` policy on any table for any role — matches the app's no-hard-delete convention.
+No `DELETE` policy on any table for any role, **except `part_requests`**: `PartOrderCard.jsx` genuinely deletes removed line items while the parent `part_orders.status = 'pending'` (both roles use the same shared component) — this was missed in the original matrix and corrected during implementation. Every other table matches the app's no-hard-delete convention.
 
 ## Column-Level Protections
 
