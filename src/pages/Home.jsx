@@ -20,7 +20,8 @@ const PART_ORDER_SELECT =
   'id, status, status_updated_by, notes, created_at, projects(name, city, clients(name)), part_requests(id, quantity, catalog_item_id, other_description, catalog_items(name))'
 
 export default function Home() {
-  const { profile } = useAuth()
+  const { profile, viewAsTeamLead } = useAuth()
+  const effectiveTeamLeadId = viewAsTeamLead?.id || profile?.team_lead_id
   const [lead, setLead] = useState(null)
   const [reports, setReports] = useState(null)
   const [partOrders, setPartOrders] = useState(null)
@@ -30,8 +31,8 @@ export default function Home() {
 
   const load = useCallback(async () => {
     try {
-      const { data: activeLead } = profile?.team_lead_id
-        ? await supabase.from('team_leads').select('id, name').eq('id', profile.team_lead_id).single()
+      const { data: activeLead } = effectiveTeamLeadId
+        ? await supabase.from('team_leads').select('id, name').eq('id', effectiveTeamLeadId).single()
         : { data: null }
       if (!activeLead) {
         setError('לא נמצא ראש צוות פעיל במערכת — פנו למנהל המפעל')
@@ -75,7 +76,7 @@ export default function Home() {
       setPartOrders([])
       setExceptions([])
     }
-  }, [profile?.team_lead_id])
+  }, [effectiveTeamLeadId])
 
   useEffect(() => {
     load()
@@ -104,7 +105,10 @@ export default function Home() {
         </h1>
         <p className="text-primary mt-1">מה קרה היום בשטח?</p>
 
-        {/* Workflow cards */}
+        {/* Workflow cards — view-as is read-only, these submit as the real
+            logged-in identity, which would be the manager, not the viewed
+            team lead, so they're hidden while viewing-as. */}
+        {!viewAsTeamLead && (
         <div className="mt-5 grid grid-cols-3 gap-3">
           <Link
             to="/report/new"
@@ -128,6 +132,7 @@ export default function Home() {
             <span className="text-sm font-bold">אישור עבודה נוספת</span>
           </Link>
         </div>
+        )}
 
         {/* Today's activity */}
         <div className="mt-8 mb-3 flex items-center justify-between gap-3">

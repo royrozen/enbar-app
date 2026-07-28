@@ -1,19 +1,47 @@
+import { useEffect, useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import Logo from './Logo'
 import { BackIcon } from './Icons'
 import { PROFILES } from '../lib/profile'
 import { useAuth } from '../lib/AuthContext'
 import { signOut } from '../lib/auth'
+import { supabase } from '../lib/supabase'
 
 export default function Header({ backTo, title }) {
   const nav = useNavigate()
-  const { profile } = useAuth()
+  const { profile, viewAsTeamLead, setViewAsTeamLead } = useAuth()
   const role = profile?.role
   const isManager = role === 'factory_manager'
+  const [teamLeads, setTeamLeads] = useState(null)
+
+  useEffect(() => {
+    if (!isManager) return
+    supabase
+      .from('team_leads')
+      .select('id, name')
+      .eq('is_active', true)
+      .is('deleted_at', null)
+      .order('name')
+      .then(({ data }) => setTeamLeads(data || []))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isManager])
 
   async function logout() {
     await signOut()
     nav('/')
+  }
+
+  function pickViewAs(e) {
+    const id = e.target.value
+    if (!id) return
+    const lead = teamLeads.find((l) => l.id === id)
+    setViewAsTeamLead(lead)
+    nav('/home')
+  }
+
+  function exitViewAs() {
+    setViewAsTeamLead(null)
+    nav('/manager')
   }
 
   return (
@@ -38,7 +66,17 @@ export default function Header({ backTo, title }) {
         </div>
 
         <div className="flex items-center gap-1">
-          {isManager && (
+          {isManager && viewAsTeamLead && (
+            <>
+              <span className="text-xs font-bold text-accent border border-accent/40 rounded-full px-2.5 py-1 bg-accent/10 hidden sm:inline">
+                צופה כ: {viewAsTeamLead.name}
+              </span>
+              <button className="btn btn-ghost text-sm" onClick={exitViewAs}>
+                חזרה לתצוגת מנהל
+              </button>
+            </>
+          )}
+          {isManager && !viewAsTeamLead && (
             <nav className="flex items-center gap-1 me-1">
               <NavLink
                 to="/manager"
@@ -57,9 +95,24 @@ export default function Header({ backTo, title }) {
               >
                 ניהול
               </NavLink>
+              {teamLeads?.length > 0 && (
+                <select
+                  className="input !min-h-[36px] !w-auto text-sm"
+                  value=""
+                  onChange={pickViewAs}
+                  aria-label="צפייה כראש צוות"
+                >
+                  <option value="">צפייה כראש צוות...</option>
+                  {teamLeads.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </nav>
           )}
-          {role && (
+          {role && !viewAsTeamLead && (
             <span className="text-xs text-primary font-medium hidden md:inline border border-border rounded-full px-2.5 py-1 bg-muted">
               {PROFILES[role]}
             </span>

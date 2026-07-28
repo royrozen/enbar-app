@@ -3,6 +3,7 @@ import { supabase } from './supabase'
 import { fetchProfile, signOut as authSignOut } from './auth'
 
 const AuthCtx = createContext(null)
+const VIEW_AS_KEY = 'enbar_view_as_team_lead'
 
 // session === undefined -> still checking for an existing session.
 // session === null -> confirmed signed out.
@@ -10,6 +11,23 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(undefined)
   const [profile, setProfile] = useState(null)
   const [authError, setAuthError] = useState('')
+  // Manager-only "view as team lead" — a UI-level filter over the manager's
+  // own session, not a real identity switch. Read access already works via
+  // the manager's existing SELECT-all RLS policies; nothing here grants any
+  // new access. { id, name } or null.
+  const [viewAsTeamLead, setViewAsTeamLeadState] = useState(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem(VIEW_AS_KEY)) || null
+    } catch {
+      return null
+    }
+  })
+
+  function setViewAsTeamLead(teamLead) {
+    setViewAsTeamLeadState(teamLead)
+    if (teamLead) sessionStorage.setItem(VIEW_AS_KEY, JSON.stringify(teamLead))
+    else sessionStorage.removeItem(VIEW_AS_KEY)
+  }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null))
@@ -37,6 +55,7 @@ export function AuthProvider({ children }) {
         return
       }
       setProfile(p)
+      if (p.role !== 'factory_manager') setViewAsTeamLead(null)
     }
     loadProfile()
     return () => {
@@ -44,11 +63,23 @@ export function AuthProvider({ children }) {
     }
   }, [session])
 
+  useEffect(() => {
+    if (!session) setViewAsTeamLead(null)
+  }, [session])
+
   const loading = session === undefined || (!!session && !profile && !authError)
 
   return (
     <AuthCtx.Provider
-      value={{ session, profile, loading, authError, clearAuthError: () => setAuthError('') }}
+      value={{
+        session,
+        profile,
+        loading,
+        authError,
+        clearAuthError: () => setAuthError(''),
+        viewAsTeamLead,
+        setViewAsTeamLead,
+      }}
     >
       {children}
     </AuthCtx.Provider>
