@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import Header from '../components/Header'
+import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import Header from "../components/Header";
 import {
   AlertIcon,
   ImageIcon,
@@ -10,111 +10,124 @@ import {
   ClipboardIcon,
   PackageIcon,
   SearchIcon,
-} from '../components/Icons'
-import { supabase, photoUrl } from '../lib/supabase'
-import { formatDate, todayISO, daysAgoISO } from '../lib/format'
+} from "../components/Icons";
+import { supabase, photoUrl } from "../lib/supabase";
+import { formatDate, todayISO, daysAgoISO } from "../lib/format";
 
 const defaultFilters = () => ({
-  projectId: '',
-  leadId: '',
+  projectId: "",
+  leadId: "",
   from: daysAgoISO(6), // default: last 7 days
   to: todayISO(),
-})
+});
 
 export default function ManagerDashboard() {
-  const [projects, setProjects] = useState([])
-  const [leads, setLeads] = useState([])
-  const [filters, setFilters] = useState(defaultFilters)
-  const [search, setSearch] = useState('')
-  const [reports, setReports] = useState(null)
-  const [stats, setStats] = useState({ today: null, pendingExceptions: null, pendingParts: null })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [projects, setProjects] = useState([]);
+  const [leads, setLeads] = useState([]);
+  const [filters, setFilters] = useState(defaultFilters);
+  const [search, setSearch] = useState("");
+  const [reports, setReports] = useState(null);
+  const [stats, setStats] = useState({
+    today: null,
+    pendingExceptions: null,
+    pendingParts: null,
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const loadMeta = useCallback(async () => {
     // "Reports today" counts by submission time (created_at), not report_date —
     // a backdated report filed today still came in today from the manager's view.
-    const startOfToday = new Date()
-    startOfToday.setHours(0, 0, 0, 0)
-    const [projRes, leadRes, todayRes, pendingRes, pendingPartsRes] = await Promise.all([
-      supabase.from('projects').select('id, name').is('deleted_at', null).order('name'),
-      supabase.from('team_leads').select('id, name').is('deleted_at', null).order('name'),
-      supabase
-        .from('reports')
-        .select('id', { count: 'exact', head: true })
-        .gte('created_at', startOfToday.toISOString()),
-      supabase
-        .from('exception_logs')
-        .select('id', { count: 'exact', head: true })
-        .neq('status', 'approved'),
-      supabase
-        .from('part_orders')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'pending'),
-    ])
-    setProjects(projRes.data || [])
-    setLeads(leadRes.data || [])
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const [projRes, leadRes, todayRes, pendingRes, pendingPartsRes] =
+      await Promise.all([
+        supabase
+          .from("projects")
+          .select("id, name")
+          .is("deleted_at", null)
+          .order("name"),
+        supabase
+          .from("team_leads")
+          .select("id, name")
+          .is("deleted_at", null)
+          .order("name"),
+        supabase
+          .from("reports")
+          .select("id", { count: "exact", head: true })
+          .gte("created_at", startOfToday.toISOString()),
+        supabase
+          .from("exception_logs")
+          .select("id", { count: "exact", head: true })
+          .neq("status", "approved"),
+        supabase
+          .from("part_orders")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "pending"),
+      ]);
+    setProjects(projRes.data || []);
+    setLeads(leadRes.data || []);
     setStats({
       today: todayRes.count ?? 0,
       pendingExceptions: pendingRes.count ?? 0,
       pendingParts: pendingPartsRes.count ?? 0,
-    })
-  }, [])
+    });
+  }, []);
 
   const loadReports = useCallback(async () => {
-    setLoading(true)
-    setError('')
+    setLoading(true);
+    setError("");
     try {
       let q = supabase
-        .from('reports')
+        .from("reports")
         .select(
-          'id, report_no, report_date, workers_count, issues, created_at, projects(name), team_leads(name), report_photos(id, storage_path, sort_order)',
+          "id, report_no, report_date, workers_count, issues, created_at, projects(name), team_leads(name), report_photos(id, storage_path, sort_order)",
         )
-        .order('report_date', { ascending: false })
-        .order('created_at', { ascending: false })
-        .limit(200)
-      if (filters.projectId) q = q.eq('project_id', filters.projectId)
-      if (filters.leadId) q = q.eq('team_lead_id', filters.leadId)
-      if (filters.from) q = q.gte('report_date', filters.from)
-      if (filters.to) q = q.lte('report_date', filters.to)
-      const { data, error: err } = await q
-      if (err) throw err
-      setReports(data || [])
+        .order("report_date", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (filters.projectId) q = q.eq("project_id", filters.projectId);
+      if (filters.leadId) q = q.eq("team_lead_id", filters.leadId);
+      if (filters.from) q = q.gte("report_date", filters.from);
+      if (filters.to) q = q.lte("report_date", filters.to);
+      const { data, error: err } = await q;
+      if (err) throw err;
+      setReports(data || []);
     } catch {
-      setError('טעינת הדוחות נכשלה — נסו לרענן')
-      setReports([])
+      setError("טעינת הדוחות נכשלה — נסו לרענן");
+      setReports([]);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [filters])
+  }, [filters]);
 
   useEffect(() => {
-    loadMeta()
-  }, [loadMeta])
+    loadMeta();
+  }, [loadMeta]);
 
   useEffect(() => {
-    loadReports()
-  }, [loadReports])
+    loadReports();
+  }, [loadReports]);
 
   function refresh() {
-    loadMeta()
-    loadReports()
+    loadMeta();
+    loadReports();
   }
 
   function firstThumb(r) {
     const sorted = [...(r.report_photos || [])].sort(
       (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0),
-    )
-    return sorted[0] ? photoUrl(sorted[0].storage_path) : null
+    );
+    return sorted[0] ? photoUrl(sorted[0].storage_path) : null;
   }
 
-  const q = search.trim()
+  const q = search.trim();
   const visibleReports = !q
     ? reports
     : (reports || []).filter((r) => {
-        const haystack = `${r.projects?.name || ''} ${r.team_leads?.name || ''} ${formatDate(r.report_date)} ${r.report_no ?? ''} #${r.report_no ?? ''}`
-        return haystack.includes(q)
-      })
+        const haystack = `${r.projects?.name || ""} ${r.team_leads?.name || ""} ${formatDate(r.report_date)} ${r.report_no ?? ""} #${r.report_no ?? ""}`;
+        return haystack.includes(q);
+      });
 
   return (
     <div className="min-h-dvh">
@@ -122,8 +135,12 @@ export default function ManagerDashboard() {
       <main className="mx-auto max-w-5xl px-4 py-6">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h1 className="text-2xl font-black">לוח דוחות</h1>
-          <button className="btn btn-ghost text-sm" onClick={refresh} disabled={loading}>
-            <RefreshIcon size={18} className={loading ? 'spin' : ''} />
+          <button
+            className="btn btn-ghost text-sm"
+            onClick={refresh}
+            disabled={loading}
+          >
+            <RefreshIcon size={18} className={loading ? "spin" : ""} />
             רענון
           </button>
         </div>
@@ -136,31 +153,39 @@ export default function ManagerDashboard() {
             </span>
             <div>
               <p className="text-3xl font-black leading-none">
-                {stats.today ?? '—'}
+                {stats.today ?? "—"}
               </p>
               <p className="text-sm text-primary mt-1">דוחות היום</p>
             </div>
           </div>
-          <Link to="/manager/exceptions" className="card p-4 flex items-center gap-4 hover:border-accent transition-colors duration-200">
-            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-white">
-              <AlertIcon size={24} />
-            </span>
-            <div>
-              <p className="text-3xl font-black leading-none text-accent">
-                {stats.pendingExceptions ?? '—'}
-              </p>
-              <p className="text-sm text-primary mt-1">אישורי עבודה נוספת ממתינים — לחצו לצפייה</p>
-            </div>
-          </Link>
-          <Link to="/manager/parts" className="card p-4 flex items-center gap-4 hover:border-accent transition-colors duration-200">
+          <Link
+            to="/manager/parts"
+            className="card p-4 flex items-center gap-4 hover:border-accent transition-colors duration-200"
+          >
             <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-white">
               <PackageIcon size={24} />
             </span>
             <div>
               <p className="text-3xl font-black leading-none text-accent">
-                {stats.pendingParts ?? '—'}
+                {stats.pendingParts ?? "—"}
               </p>
-              <p className="text-sm text-primary mt-1">חלקים ממתינים — לחצו לצפייה</p>
+              <p className="text-sm text-primary mt-1">חלקים ממתינים</p>
+            </div>
+          </Link>
+          <Link
+            to="/manager/exceptions"
+            className="card p-4 flex items-center gap-4 hover:border-accent transition-colors duration-200"
+          >
+            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-white">
+              <AlertIcon size={24} />
+            </span>
+            <div>
+              <p className="text-3xl font-black leading-none text-accent">
+                {stats.pendingExceptions ?? "—"}
+              </p>
+              <p className="text-sm text-primary mt-1">
+                אישורי עבודה נוספת ממתינים
+              </p>
             </div>
           </Link>
         </div>
@@ -168,51 +193,71 @@ export default function ManagerDashboard() {
         {/* Filters */}
         <div className="card mt-4 p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
           <div className="sm:col-span-1">
-            <label className="label !text-xs" htmlFor="f-project">פרויקט</label>
+            <label className="label !text-xs" htmlFor="f-project">
+              פרויקט
+            </label>
             <select
               id="f-project"
               className="input !min-h-[48px]"
               value={filters.projectId}
-              onChange={(e) => setFilters((f) => ({ ...f, projectId: e.target.value }))}
+              onChange={(e) =>
+                setFilters((f) => ({ ...f, projectId: e.target.value }))
+              }
             >
               <option value="">כל הפרויקטים</option>
               {projects.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
               ))}
             </select>
           </div>
           <div className="sm:col-span-1">
-            <label className="label !text-xs" htmlFor="f-lead">ראש צוות</label>
+            <label className="label !text-xs" htmlFor="f-lead">
+              ראש צוות
+            </label>
             <select
               id="f-lead"
               className="input !min-h-[48px]"
               value={filters.leadId}
-              onChange={(e) => setFilters((f) => ({ ...f, leadId: e.target.value }))}
+              onChange={(e) =>
+                setFilters((f) => ({ ...f, leadId: e.target.value }))
+              }
             >
               <option value="">כל ראשי הצוות</option>
               {leads.map((l) => (
-                <option key={l.id} value={l.id}>{l.name}</option>
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
               ))}
             </select>
           </div>
           <div className="min-w-0">
-            <label className="label !text-xs" htmlFor="f-from">מתאריך</label>
+            <label className="label !text-xs" htmlFor="f-from">
+              מתאריך
+            </label>
             <input
               id="f-from"
               type="date"
               className="input !min-h-[48px] w-full min-w-0"
               value={filters.from}
-              onChange={(e) => setFilters((f) => ({ ...f, from: e.target.value }))}
+              onChange={(e) =>
+                setFilters((f) => ({ ...f, from: e.target.value }))
+              }
             />
           </div>
           <div className="min-w-0">
-            <label className="label !text-xs" htmlFor="f-to">עד תאריך</label>
+            <label className="label !text-xs" htmlFor="f-to">
+              עד תאריך
+            </label>
             <input
               id="f-to"
               type="date"
               className="input !min-h-[48px] w-full min-w-0"
               value={filters.to}
-              onChange={(e) => setFilters((f) => ({ ...f, to: e.target.value }))}
+              onChange={(e) =>
+                setFilters((f) => ({ ...f, to: e.target.value }))
+              }
             />
           </div>
           <button
@@ -254,13 +299,15 @@ export default function ManagerDashboard() {
             <ClipboardIcon size={40} className="mx-auto mb-3 opacity-60" />
             <p className="font-bold text-foreground">לא נמצאו דוחות</p>
             <p className="text-sm mt-1">
-              {q ? 'נסו חיפוש אחר' : 'נסו להרחיב את טווח התאריכים או לאפס את המסננים'}
+              {q
+                ? "נסו חיפוש אחר"
+                : "נסו להרחיב את טווח התאריכים או לאפס את המסננים"}
             </p>
           </div>
         ) : (
           <ul className="mt-4 flex flex-col gap-3">
             {visibleReports.map((r) => {
-              const thumb = firstThumb(r)
+              const thumb = firstThumb(r);
               return (
                 <li key={r.id}>
                   <Link
@@ -269,18 +316,29 @@ export default function ManagerDashboard() {
                   >
                     <div className="h-16 w-16 shrink-0 rounded-xl overflow-hidden bg-muted border border-border flex items-center justify-center text-primary">
                       {thumb ? (
-                        <img src={thumb} alt="" loading="lazy" className="h-full w-full object-cover" />
+                        <img
+                          src={thumb}
+                          alt=""
+                          loading="lazy"
+                          className="h-full w-full object-cover"
+                        />
                       ) : (
                         <ImageIcon size={24} className="opacity-50" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold truncate">{r.projects?.name || 'פרויקט'}</span>
+                        <span className="font-bold truncate">
+                          {r.projects?.name || "פרויקט"}
+                        </span>
                         {r.report_no != null && (
-                          <span className="text-xs text-primary">#{r.report_no}</span>
+                          <span className="text-xs text-primary">
+                            #{r.report_no}
+                          </span>
                         )}
-                        <span className="text-sm text-primary">{formatDate(r.report_date)}</span>
+                        <span className="text-sm text-primary">
+                          {formatDate(r.report_date)}
+                        </span>
                       </div>
                       <p className="text-sm text-primary mt-1 flex items-center gap-3 flex-wrap">
                         <span>{r.team_leads?.name}</span>
@@ -307,11 +365,11 @@ export default function ManagerDashboard() {
                     </div>
                   </Link>
                 </li>
-              )
+              );
             })}
           </ul>
         )}
       </main>
     </div>
-  )
+  );
 }

@@ -46,7 +46,29 @@
       "mcp__claude_ai_Supabase__pause_project",
       "mcp__claude_ai_Vercel__get_project",
       "mcp__claude_ai_Supabase__get_project_url",
-      "mcp__claude_ai_Supabase__get_publishable_keys"
+      "mcp__claude_ai_Supabase__get_publishable_keys",
+      "Bash(docker --version)",
+      "Bash(env)",
+      "Bash(npx vite *)",
+      "Bash(node -e ' *)",
+      "Bash(sed -i '' \"s/v4\\\\.pdf/v5.pdf/g; s/v4\\\\.png/v5.png/g\" gen_v5.cjs)",
+      "Bash(node gen_v5.cjs 200)",
+      "Bash(sips -s format png v5.pdf --out v5.png)",
+      "Bash(npx vercel *)",
+      "Bash(sed -i '' \"s/v6\\\\.pdf/v7.pdf/g; s/v6\\\\.png/v7.png/g\" gen_v7.cjs)",
+      "Bash(node gen_v7.cjs 200)",
+      "Bash(sips -s format png v7.pdf --out v7.png)",
+      "Bash(sips --cropOffset 190 0 -c 200 595 v7.png --out v7_crop.png)",
+      "Bash(node gen_v7.cjs 300)",
+      "Bash(grep -c \"/Type /Page\\\\$\")",
+      "Bash(node gen_v10.cjs 300)",
+      "Bash(sips -s format png v10.pdf --out v10_300.png)",
+      "WebFetch(domain:github.com)",
+      "Bash(code *)",
+      "Bash(mkdir -p \"/private/tmp/claude-501/-Users-royrozentouler-Enbar--enbar-app/85c5e25f-1801-4f62-8a3e-fc917806399b/scratchpad/vsix\")",
+      "Bash(shasum -a 256 rtl-for-vs-code-agents-10.2.0.vsix)",
+      "Bash(node gen_v11.cjs 200)",
+      "Bash(sips -s format png v11.pdf --out v11.png)"
     ]
   }
 }

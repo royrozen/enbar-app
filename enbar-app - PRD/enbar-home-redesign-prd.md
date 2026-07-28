@@ -34,15 +34,16 @@ Below the header, a type-filter chip row (reusing the existing `StatusChips` com
 
 **List contents — only entries dated today** (see D2 for what "today" means for reports), across the two types that exist today, newest-first:
 
-| Type | Row shows | Tap target |
-|---|---|---|
-| Work log (report) | date badge ("היום"), project name, photo count icon, issue flag if `issues` is non-empty, extras status badge if an extra exists | `/report/:id` — opens in **edit mode** (it's today's) |
-| Part order (grouped by `order_id`, reusing the existing `groupPartRequestsByOrder` + drawer pattern from `Home.jsx`/`ManagerParts.jsx`) | date badge ("היום"), project name, item name (single-item order) or item count (multi-item order), status badge (single) or chevron-drawer (multi) | `/parts/:id` per item — opens in **edit mode** |
-| Exceptions | no data source exists yet (§6, D1) | — |
+| Type                                                                                                                                    | Row shows                                                                                                                                          | Tap target                                            |
+| --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Work log (report)                                                                                                                       | date badge ("היום"), project name, photo count icon, issue flag if `issues` is non-empty, extras status badge if an extra exists                   | `/report/:id` — opens in **edit mode** (it's today's) |
+| Part order (grouped by `order_id`, reusing the existing `groupPartRequestsByOrder` + drawer pattern from `Home.jsx`/`ManagerParts.jsx`) | date badge ("היום"), project name, item name (single-item order) or item count (multi-item order), status badge (single) or chevron-drawer (multi) | `/parts/:id` per item — opens in **edit mode**        |
+| Exceptions                                                                                                                              | no data source exists yet (§6, D1)                                                                                                                 | —                                                     |
 
 Both existing row/drawer components already built this session for `Home.jsx` are reused as-is; only the data source changes from "all of mine" to "mine, today only."
 
 **Empty states:**
+
 - No entries at all today, any type: card with icon, "עדיין לא דיווחתם היום", no secondary prompt needed (the three cards above are already the prompt).
 - Entries exist today but none match the selected type filter: "לא נמצאו רשומות מסוג זה היום" (same pattern as the existing "לא נמצאו בקשות בסטטוס זה" empty state).
 - "יומן חריגים" filter selected: always empty this phase (§6, D1 decides whether the chip itself is even shown).
@@ -52,6 +53,7 @@ Both existing row/drawer components already built this session for `Home.jsx` ar
 Both existing detail routes gain a conditional edit mode: **if the entry is "today's" (§6, D2), render editable fields with a save action; otherwise render exactly what exists today (fully read-only).** No new routes — same URLs, same components, mode is derived from the loaded record's date.
 
 **Report (`/report/:id`) — editable fields when today:**
+
 - תיאור העבודה שבוצעה (work description)
 - כמה עובדים היו באתר (worker count)
 - בעיות שהתגלו באתר (issues text)
@@ -61,6 +63,7 @@ Both existing detail routes gain a conditional edit mode: **if the entry is "tod
 **Not editable, ever:** לקוח (client), פרויקט (project), תאריך (report_date). Changing the project/client after submission would break manager-side attribution and history; changing the date would let a report escape its own "today" edit window.
 
 **Part request (`/parts/:id`) — editable fields when today, per line item:**
+
 - חלק מהקטלוג / אחר (catalog item or free-text description, including switching between the two)
 - כמות (quantity)
 - הערות לייצור (notes)
