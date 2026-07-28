@@ -37,8 +37,9 @@ export default function Header({ backTo, title }) {
     nav('/home')
   }
 
-  function exitViewAs() {
+  function exitViewAs(detailsEl) {
     setViewAsTeamLead(null)
+    detailsEl?.removeAttribute('open')
     nav('/manager')
   }
 
@@ -65,14 +66,20 @@ export default function Header({ backTo, title }) {
 
         <div className="flex items-center gap-1">
           {isManager && viewAsTeamLead && (
-            <>
-              <span className="text-xs font-bold text-accent border border-accent/40 rounded-full px-2.5 py-1 bg-accent/10 hidden sm:inline">
-                צופה כ: {viewAsTeamLead.name}
-              </span>
-              <button className="btn btn-ghost text-sm" onClick={exitViewAs}>
-                חזרה לתצוגת מנהל
-              </button>
-            </>
+            <details className="relative">
+              <summary className="text-xs font-bold text-accent border border-accent/40 rounded-full px-2.5 py-1 bg-accent/10 cursor-pointer list-none select-none">
+                צופה כמנהל צוות
+              </summary>
+              <div className="absolute end-0 mt-2 w-52 rounded-xl border border-border bg-white shadow-lg py-1 z-30">
+                <button
+                  type="button"
+                  className="w-full text-start px-3 py-2 text-sm hover:bg-muted"
+                  onClick={(e) => exitViewAs(e.currentTarget.closest('details'))}
+                >
+                  חזרה לתצוגת מנהל
+                </button>
+              </div>
+            </details>
           )}
           {isManager && !viewAsTeamLead && (
             <nav className="flex items-center gap-1 me-1">
