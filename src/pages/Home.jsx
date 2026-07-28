@@ -105,10 +105,10 @@ export default function Home() {
         </h1>
         <p className="text-primary mt-1">מה קרה היום בשטח?</p>
 
-        {/* Workflow cards — view-as is read-only, these submit as the real
-            logged-in identity, which would be the manager, not the viewed
-            team lead, so they're hidden while viewing-as. */}
-        {!viewAsTeamLead && (
+        {/* Workflow cards — while viewing-as, these attribute the new
+            report/exception/part-order to the viewed team lead
+            (team_lead_id), but created_by/status_updated_by still record
+            the manager as who actually acted. */}
         <div className="mt-5 grid grid-cols-3 gap-3">
           <Link
             to="/report/new"
@@ -132,7 +132,6 @@ export default function Home() {
             <span className="text-sm font-bold">אישור עבודה נוספת</span>
           </Link>
         </div>
-        )}
 
         {/* Today's activity */}
         <div className="mt-8 mb-3 flex items-center justify-between gap-3">

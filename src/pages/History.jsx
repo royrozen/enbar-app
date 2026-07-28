@@ -5,8 +5,9 @@ import StatusBadge from '../components/StatusBadge'
 import StatusChips from '../components/StatusChips'
 import PartOrderCard from '../components/PartOrderCard'
 import { ImageIcon, AlertIcon, SpinnerIcon, ClipboardIcon } from '../components/Icons'
-import { supabase, fetchActiveTeamLead } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
 import { formatDate, todayISO, daysAgoISO } from '../lib/format'
+import { useAuth } from '../lib/AuthContext'
 
 const TYPE_CHIPS = [
   { value: '', label: 'הכל' },
@@ -26,6 +27,8 @@ const PART_ORDER_SELECT =
   'id, status, status_updated_by, notes, created_at, projects(name, city, clients(name)), part_requests(id, quantity, catalog_item_id, other_description, catalog_items(name))'
 
 export default function History() {
+  const { profile, viewAsTeamLead } = useAuth()
+  const effectiveTeamLeadId = viewAsTeamLead?.id || profile?.team_lead_id
   const [lead, setLead] = useState(null)
   const [projects, setProjects] = useState([])
   const [filters, setFilters] = useState(defaultFilters)
@@ -37,14 +40,16 @@ export default function History() {
   const [reportNoSearch, setReportNoSearch] = useState('')
 
   const loadMeta = useCallback(async () => {
-    const [activeLead, { data: projs }] = await Promise.all([
-      fetchActiveTeamLead(),
+    const [{ data: activeLead }, { data: projs }] = await Promise.all([
+      effectiveTeamLeadId
+        ? supabase.from('team_leads').select('id, name').eq('id', effectiveTeamLeadId).single()
+        : Promise.resolve({ data: null }),
       supabase.from('projects').select('id, name').is('deleted_at', null).order('name'),
     ])
     setLead(activeLead)
     setProjects(projs || [])
     return activeLead
-  }, [])
+  }, [effectiveTeamLeadId])
 
   const loadData = useCallback(async (activeLead) => {
     if (!activeLead) return
@@ -109,7 +114,7 @@ export default function History() {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [effectiveTeamLeadId])
 
   useEffect(() => {
     if (lead) loadData(lead)

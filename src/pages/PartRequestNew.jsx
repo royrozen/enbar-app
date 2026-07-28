@@ -11,7 +11,8 @@ import {
   PencilIcon,
   ChevronDownIcon,
 } from '../components/Icons'
-import { supabase, fetchActiveTeamLead } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../lib/AuthContext'
 
 const DRAFT_KEY = 'enbar_part_request_draft'
 
@@ -46,6 +47,8 @@ function loadDraft() {
 
 export default function PartRequestNew() {
   const nav = useNavigate()
+  const { profile, viewAsTeamLead } = useAuth()
+  const effectiveTeamLeadId = viewAsTeamLead?.id || profile?.team_lead_id
   const draft = useMemo(loadDraft, [])
 
   const [clients, setClients] = useState(null)
@@ -68,7 +71,7 @@ export default function PartRequestNew() {
     let cancelled = false
     async function load() {
       try {
-        const [{ data: cls, error: cErr }, { data: items, error: iErr }, activeLead] =
+        const [{ data: cls, error: cErr }, { data: items, error: iErr }, { data: activeLead }] =
           await Promise.all([
             supabase
               .from('clients')
@@ -82,7 +85,9 @@ export default function PartRequestNew() {
               .eq('is_active', true)
               .is('deleted_at', null)
               .order('name'),
-            fetchActiveTeamLead(),
+            effectiveTeamLeadId
+              ? supabase.from('team_leads').select('id, name').eq('id', effectiveTeamLeadId).single()
+              : Promise.resolve({ data: null }),
           ])
         if (cancelled) return
         if (cErr) throw cErr
@@ -107,7 +112,7 @@ export default function PartRequestNew() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [effectiveTeamLeadId])
 
   const selectedClient = (clients || []).find((c) => c.id === clientId) || null
   const clientProjects = selectedClient?.projects || []

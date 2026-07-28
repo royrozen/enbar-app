@@ -10,8 +10,9 @@ import {
   AlertIcon,
   PencilIcon,
 } from '../components/Icons'
-import { supabase, fetchActiveTeamLead, EXCEPTION_PHOTO_BUCKET } from '../lib/supabase'
+import { supabase, EXCEPTION_PHOTO_BUCKET } from '../lib/supabase'
 import { MAX_EXCEPTION_DESCRIPTION_LENGTH } from '../lib/format'
+import { useAuth } from '../lib/AuthContext'
 
 const DRAFT_KEY = 'enbar_exception_draft'
 const MAX_PHOTOS = 3
@@ -32,6 +33,8 @@ function loadDraft() {
 
 export default function ExceptionNew() {
   const nav = useNavigate()
+  const { profile, viewAsTeamLead } = useAuth()
+  const effectiveTeamLeadId = viewAsTeamLead?.id || profile?.team_lead_id
   const draft = useMemo(loadDraft, [])
 
   const [clients, setClients] = useState(null)
@@ -59,14 +62,16 @@ export default function ExceptionNew() {
     let cancelled = false
     async function load() {
       try {
-        const [{ data: cls, error: cErr }, activeLead] = await Promise.all([
+        const [{ data: cls, error: cErr }, { data: activeLead }] = await Promise.all([
           supabase
             .from('clients')
             .select('id, name, projects(id, name, city, is_active, deleted_at)')
             .eq('is_active', true)
             .is('deleted_at', null)
             .order('name'),
-          fetchActiveTeamLead(),
+          effectiveTeamLeadId
+            ? supabase.from('team_leads').select('id, name').eq('id', effectiveTeamLeadId).single()
+            : Promise.resolve({ data: null }),
         ])
         if (cancelled) return
         if (cErr) throw cErr
@@ -89,7 +94,7 @@ export default function ExceptionNew() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [effectiveTeamLeadId])
 
   const selectedClient = (clients || []).find((c) => c.id === clientId) || null
   const clientProjects = selectedClient?.projects || []

@@ -26,7 +26,8 @@ function loadDraft() {
 
 export default function ReportNew() {
   const nav = useNavigate()
-  const { session, profile } = useAuth()
+  const { session, profile, viewAsTeamLead } = useAuth()
+  const effectiveTeamLeadId = viewAsTeamLead?.id || profile?.team_lead_id
   const draft = useMemo(loadDraft, [])
 
   const [clients, setClients] = useState(null)
@@ -62,8 +63,8 @@ export default function ReportNew() {
             .eq('is_active', true)
             .is('deleted_at', null)
             .order('name'),
-          profile?.team_lead_id
-            ? supabase.from('team_leads').select('id, name').eq('id', profile.team_lead_id).single()
+          effectiveTeamLeadId
+            ? supabase.from('team_leads').select('id, name').eq('id', effectiveTeamLeadId).single()
             : Promise.resolve({ data: null }),
         ])
         if (cancelled) return
@@ -87,7 +88,7 @@ export default function ReportNew() {
     return () => {
       cancelled = true
     }
-  }, [profile?.team_lead_id])
+  }, [effectiveTeamLeadId])
 
   const selectedClient = (clients || []).find((c) => c.id === clientId) || null
   const clientProjects = selectedClient?.projects || []
