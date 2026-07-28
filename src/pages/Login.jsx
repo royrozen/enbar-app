@@ -50,43 +50,64 @@ export default function Login() {
     }
     setError('')
     setBusy(true)
-    const { error: err } = await sendOtp(normalized)
-    setBusy(false)
-    if (err) {
+    try {
+      const { error: err } = await sendOtp(normalized)
+      if (err) {
+        setError('שליחת הקוד נכשלה — נסו שוב')
+        return
+      }
+      setPhone(normalized)
+      setOtp('')
+      setStep('otp')
+      setResendIn(RESEND_SECONDS)
+    } catch {
       setError('שליחת הקוד נכשלה — נסו שוב')
-      return
+    } finally {
+      setBusy(false)
     }
-    setPhone(normalized)
-    setOtp('')
-    setStep('otp')
-    setResendIn(RESEND_SECONDS)
   }
 
   async function submitOtp(e) {
     e.preventDefault()
     setError('')
     setBusy(true)
-    const { error: err } = await verifyOtp(phone, otp)
-    setBusy(false)
-    if (err) {
-      setError('הקוד שהוזן שגוי, נסה שוב')
-      return
+    try {
+      const { error: err } = await verifyOtp(phone, otp)
+      if (err) {
+        setError('הקוד שהוזן שגוי, נסה שוב')
+      }
+      // On success, AuthContext picks up the new session via
+      // onAuthStateChange; this component re-renders into the
+      // session+profile branch above once the profile row resolves.
+    } catch {
+      setError('האימות נכשל — בדקו את חיבור האינטרנט ונסו שוב')
+    } finally {
+      setBusy(false)
     }
-    // AuthContext picks up the new session via onAuthStateChange; this
-    // component re-renders into the session+profile branch above once the
-    // profile row resolves.
+  }
+
+  function changeNumber() {
+    setStep('phone')
+    setOtp('')
+    setError('')
+    setResendIn(0)
   }
 
   async function resend() {
     if (resendIn > 0 || busy) return
     setBusy(true)
-    const { error: err } = await sendOtp(phone)
-    setBusy(false)
-    if (err) {
+    try {
+      const { error: err } = await sendOtp(phone)
+      if (err) {
+        setError('שליחת הקוד נכשלה — נסו שוב')
+        return
+      }
+      setResendIn(RESEND_SECONDS)
+    } catch {
       setError('שליחת הקוד נכשלה — נסו שוב')
-      return
+    } finally {
+      setBusy(false)
     }
-    setResendIn(RESEND_SECONDS)
   }
 
   return (
@@ -121,7 +142,7 @@ export default function Login() {
       ) : (
         <form onSubmit={submitOtp} className="mt-10 w-full max-w-sm flex flex-col gap-3">
           <label className="label" htmlFor="otp">
-            {`הזן את הקוד שנשלח למספר ${phone}`}
+            {`הזן את הקוד שנשלח למספר ${phoneInput}`}
           </label>
           <input
             id="otp"
@@ -152,6 +173,14 @@ export default function Login() {
             onClick={resend}
           >
             {resendIn > 0 ? `שלח שוב בעוד ${resendIn} שניות` : 'שלח קוד מחדש'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost text-sm"
+            disabled={busy}
+            onClick={changeNumber}
+          >
+            שינוי מספר טלפון
           </button>
         </form>
       )}
