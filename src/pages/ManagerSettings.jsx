@@ -572,7 +572,10 @@ function ClientsTab() {
 }
 
 function LeadsTab() {
-  const { items, error, setError, load, toggleActive, softDelete } = useAdminList('team_leads')
+  const { items, error, setError, load, toggleActive, softDelete } = useAdminList(
+    'team_leads',
+    '*, profiles(phone, role)',
+  )
   const [showAdd, setShowAdd] = useState(false)
   const [name, setName] = useState('')
   const [formError, setFormError] = useState('')
@@ -627,7 +630,7 @@ function LeadsTab() {
             </button>
           </div>
           <p className="text-xs text-primary mt-2">
-            שימו לב: בשלב הנוכחי הדוחות משויכים אוטומטית לראש הצוות הפעיל הראשון במערכת
+            שימו לב: חיבור מספר טלפון וגישה למערכת עבור ראש צוות חדש נעשה ידנית על ידי מנהל טכני
           </p>
         </form>
       )}
@@ -636,12 +639,18 @@ function LeadsTab() {
       <ul className="flex flex-col gap-2">
         {(items || []).map((l) => {
           const lastActive = l.is_active && activeCount === 1
+          const linkedProfile = Array.isArray(l.profiles) ? l.profiles[0] : l.profiles
           return (
             <li key={l.id} className={`card p-4 flex items-center gap-3 flex-wrap ${l.is_active ? '' : 'opacity-55'}`}>
-              <p className="flex-1 font-bold truncate">
-                {l.name}
-                {!l.is_active && <span className="text-xs text-primary font-normal ms-2">(מושבת)</span>}
-              </p>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold truncate">
+                  {l.name}
+                  {!l.is_active && <span className="text-xs text-primary font-normal ms-2">(מושבת)</span>}
+                </p>
+                <p className="text-xs text-primary mt-0.5" dir="ltr">
+                  {linkedProfile ? linkedProfile.phone : 'אין משתמש מקושר'}
+                </p>
+              </div>
               <ActiveToggle item={l} onToggle={() => toggleActive(l)} />
               <DeleteAction
                 name={l.name}

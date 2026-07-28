@@ -9,8 +9,9 @@ import {
   SpinnerIcon,
   AlertIcon,
 } from '../components/Icons'
-import { supabase, fetchActiveTeamLead, PHOTO_BUCKET } from '../lib/supabase'
+import { supabase, PHOTO_BUCKET } from '../lib/supabase'
 import { todayISO } from '../lib/format'
+import { useAuth } from '../lib/AuthContext'
 
 const DRAFT_KEY = 'enbar_report_draft'
 const MAX_PHOTOS = 10
@@ -25,6 +26,7 @@ function loadDraft() {
 
 export default function ReportNew() {
   const nav = useNavigate()
+  const { session, profile } = useAuth()
   const draft = useMemo(loadDraft, [])
 
   const [clients, setClients] = useState(null)
@@ -53,14 +55,16 @@ export default function ReportNew() {
     let cancelled = false
     async function load() {
       try {
-        const [{ data: cls, error: cErr }, activeLead] = await Promise.all([
+        const [{ data: cls, error: cErr }, { data: activeLead }] = await Promise.all([
           supabase
             .from('clients')
             .select('id, name, projects(id, name, city, is_active, deleted_at)')
             .eq('is_active', true)
             .is('deleted_at', null)
             .order('name'),
-          fetchActiveTeamLead(),
+          profile?.team_lead_id
+            ? supabase.from('team_leads').select('id, name').eq('id', profile.team_lead_id).single()
+            : Promise.resolve({ data: null }),
         ])
         if (cancelled) return
         if (cErr) throw cErr
@@ -83,7 +87,7 @@ export default function ReportNew() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [profile?.team_lead_id])
 
   const selectedClient = (clients || []).find((c) => c.id === clientId) || null
   const clientProjects = selectedClient?.projects || []
@@ -148,6 +152,7 @@ export default function ReportNew() {
         .from('reports')
         .insert({
           team_lead_id: lead.id,
+          created_by: session.user.id,
           project_id: projectId,
           report_date: date,
           work_description: desc.trim(),

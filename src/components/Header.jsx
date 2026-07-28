@@ -1,15 +1,18 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import Logo from './Logo'
 import { BackIcon } from './Icons'
-import { getProfile, clearProfile, PROFILES, homeFor } from '../lib/profile'
+import { PROFILES } from '../lib/profile'
+import { useAuth } from '../lib/AuthContext'
+import { signOut } from '../lib/auth'
 
 export default function Header({ backTo, title }) {
   const nav = useNavigate()
-  const profile = getProfile()
-  const isManager = profile === 'factory_manager'
+  const { profile } = useAuth()
+  const role = profile?.role
+  const isManager = role === 'factory_manager'
 
-  function switchProfile() {
-    clearProfile()
+  async function logout() {
+    await signOut()
     nav('/')
   }
 
@@ -26,7 +29,7 @@ export default function Header({ backTo, title }) {
               <BackIcon size={22} />
             </button>
           )}
-          <Link to={profile ? homeFor(profile) : '/'} className="shrink-0" aria-label="מסך ראשי">
+          <Link to={role === 'team_lead' ? '/home' : role ? '/manager' : '/'} className="shrink-0" aria-label="מסך ראשי">
             <Logo className="h-9 w-auto" />
           </Link>
           {title && (
@@ -56,13 +59,13 @@ export default function Header({ backTo, title }) {
               </NavLink>
             </nav>
           )}
-          {profile && (
+          {role && (
             <span className="text-xs text-primary font-medium hidden md:inline border border-border rounded-full px-2.5 py-1 bg-muted">
-              {PROFILES[profile]}
+              {PROFILES[role]}
             </span>
           )}
-          <button className="btn btn-ghost text-sm" onClick={switchProfile}>
-            החלף פרופיל
+          <button className="btn btn-ghost text-sm" onClick={logout}>
+            התנתקות
           </button>
         </div>
       </div>

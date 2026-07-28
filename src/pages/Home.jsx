@@ -5,8 +5,9 @@ import StatusBadge from '../components/StatusBadge'
 import StatusChips from '../components/StatusChips'
 import PartOrderCard from '../components/PartOrderCard'
 import { ImageIcon, AlertIcon, SpinnerIcon, ClipboardIcon, PackageIcon } from '../components/Icons'
-import { supabase, fetchActiveTeamLead } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
 import { isToday } from '../lib/format'
+import { useAuth } from '../lib/AuthContext'
 
 const TYPE_CHIPS = [
   { value: '', label: 'הכל' },
@@ -19,6 +20,7 @@ const PART_ORDER_SELECT =
   'id, status, status_updated_by, notes, created_at, projects(name, city, clients(name)), part_requests(id, quantity, catalog_item_id, other_description, catalog_items(name))'
 
 export default function Home() {
+  const { profile } = useAuth()
   const [lead, setLead] = useState(null)
   const [reports, setReports] = useState(null)
   const [partOrders, setPartOrders] = useState(null)
@@ -28,7 +30,9 @@ export default function Home() {
 
   const load = useCallback(async () => {
     try {
-      const activeLead = await fetchActiveTeamLead()
+      const { data: activeLead } = profile?.team_lead_id
+        ? await supabase.from('team_leads').select('id, name').eq('id', profile.team_lead_id).single()
+        : { data: null }
       if (!activeLead) {
         setError('לא נמצא ראש צוות פעיל במערכת — פנו למנהל המפעל')
         setReports([])
@@ -71,7 +75,7 @@ export default function Home() {
       setPartOrders([])
       setExceptions([])
     }
-  }, [])
+  }, [profile?.team_lead_id])
 
   useEffect(() => {
     load()
