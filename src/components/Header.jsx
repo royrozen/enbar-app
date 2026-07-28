@@ -31,11 +31,9 @@ export default function Header({ backTo, title }) {
     nav('/')
   }
 
-  function pickViewAs(e) {
-    const id = e.target.value
-    if (!id) return
-    const lead = teamLeads.find((l) => l.id === id)
+  function pickViewAs(lead, detailsEl) {
     setViewAsTeamLead(lead)
+    detailsEl?.removeAttribute('open')
     nav('/home')
   }
 
@@ -95,24 +93,32 @@ export default function Header({ backTo, title }) {
               >
                 ניהול
               </NavLink>
-              {teamLeads?.length > 0 && (
-                <select
-                  className="input !min-h-[36px] !w-auto text-sm"
-                  value=""
-                  onChange={pickViewAs}
-                  aria-label="צפייה כראש צוות"
-                >
-                  <option value="">צפייה כראש צוות...</option>
-                  {teamLeads.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.name}
-                    </option>
-                  ))}
-                </select>
-              )}
             </nav>
           )}
-          {role && !viewAsTeamLead && (
+          {role && !viewAsTeamLead && isManager && (
+            <details className="relative">
+              <summary className="text-xs text-primary font-medium border border-border rounded-full px-2.5 py-1 bg-muted cursor-pointer list-none select-none">
+                {PROFILES[role]}
+              </summary>
+              <div className="absolute end-0 mt-2 w-52 rounded-xl border border-border bg-white shadow-lg py-1 z-30">
+                {teamLeads?.length > 0 ? (
+                  teamLeads.map((l) => (
+                    <button
+                      key={l.id}
+                      type="button"
+                      className="w-full text-start px-3 py-2 text-sm hover:bg-muted"
+                      onClick={(e) => pickViewAs(l, e.currentTarget.closest('details'))}
+                    >
+                      צפייה כ-{l.name}
+                    </button>
+                  ))
+                ) : (
+                  <p className="px-3 py-2 text-sm text-primary">אין ראשי צוות פעילים</p>
+                )}
+              </div>
+            </details>
+          )}
+          {role && !viewAsTeamLead && !isManager && (
             <span className="text-xs text-primary font-medium hidden md:inline border border-border rounded-full px-2.5 py-1 bg-muted">
               {PROFILES[role]}
             </span>
