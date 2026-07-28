@@ -113,7 +113,6 @@ export default function Login() {
   return (
     <main className="min-h-dvh flex flex-col items-center justify-center px-6 py-10">
       <Logo className="h-16 w-auto" />
-      <p className="mt-2 text-primary font-medium">דוחות עבודה יומיים</p>
 
       {step === 'phone' ? (
         <form onSubmit={submitPhone} className="mt-10 w-full max-w-sm flex flex-col gap-3">
