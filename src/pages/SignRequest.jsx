@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import Logo from '../components/Logo'
 import Lightbox from '../components/Lightbox'
-import { SpinnerIcon, AlertIcon, CheckCircleIcon } from '../components/Icons'
-import { supabase, SIGNED_DOC_BUCKET, exceptionPhotoUrl } from '../lib/supabase'
+import { SpinnerIcon, AlertIcon, CheckCircleIcon, FileTextIcon } from '../components/Icons'
+import { supabase, SIGNED_DOC_BUCKET, exceptionPhotoUrl, signedDocUrl } from '../lib/supabase'
 import { formatDate, todayISO } from '../lib/format'
 
 const CONSENT_TEXT = 'אני מאשר/ת שקראתי את התוכן לעיל ומסכים/ה לחתום עליו'
@@ -85,6 +85,7 @@ export default function SignRequest() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [lightbox, setLightbox] = useState(null)
+  const [docUrl, setDocUrl] = useState('')
   const canvasRef = useRef(null)
 
   useEffect(() => {
@@ -102,6 +103,13 @@ export default function SignRequest() {
       }
       setData(row)
       setFullName(row.contact_person || row.client_name || '')
+      if (row.status === 'signed' && row.signed_pdf_path) {
+        try {
+          setDocUrl(await signedDocUrl(row.signed_pdf_path, 3600))
+        } catch {
+          // no doc link — the plain thank-you message still shows
+        }
+      }
       setState(row.status === 'signed' ? 'signed' : 'form')
     }
     load()
@@ -144,6 +152,11 @@ export default function SignRequest() {
       })
       if (rpcErr) throw rpcErr
 
+      try {
+        setDocUrl(await signedDocUrl(path, 3600))
+      } catch {
+        // no doc link — the plain thank-you message still shows
+      }
       setState('done')
     } catch {
       setSubmitError('השליחה נכשלה — נסו שוב')
@@ -176,6 +189,17 @@ export default function SignRequest() {
         <div className="card p-8 max-w-md w-full text-center">
           <CheckCircleIcon size={56} className="mx-auto mb-3 text-success" />
           <p className="font-bold text-lg">תודה, האישור נשלח בהצלחה</p>
+          {docUrl && (
+            <a
+              href={docUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-outline mt-5 inline-flex"
+            >
+              <FileTextIcon size={16} />
+              צפייה בדוח החתום
+            </a>
+          )}
         </div>
       )}
 

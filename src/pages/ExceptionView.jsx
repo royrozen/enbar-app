@@ -471,7 +471,7 @@ export default function ExceptionView({ backTo = "/home" }) {
                   </p>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  {log.pdf_path && (
+                  {log.pdf_path && !locked && (
                     <a
                       href={exceptionDocPublicUrl()}
                       target="_blank"
