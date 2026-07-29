@@ -351,10 +351,34 @@ export default function ExceptionView({ backTo = "/home" }) {
   }
 
   async function shareSignedDocWhatsApp() {
+    // wa.me can only pre-fill a text message with a link — it can't attach an
+    // actual file. Where the Web Share API supports sharing files (mobile
+    // browsers, mainly), use it so the native share sheet attaches the real
+    // PDF and the user picks WhatsApp from there. Falls back to the old
+    // link-in-text wa.me behavior everywhere else.
+    const useNativeShare = typeof navigator.share === "function" && typeof navigator.canShare === "function";
     // open synchronously (still inside the click gesture) so popup blockers don't
-    // kill it once we're past the await below
-    const win = window.open("", "_blank");
+    // kill it once we're past the await below — only needed for the wa.me fallback.
+    const win = useNativeShare ? null : window.open("", "_blank");
     const url = await signedDocUrl(log.signed_path, SHARE_EXPIRY);
+
+    if (useNativeShare) {
+      try {
+        const res = await fetch(url);
+        const blob = await res.blob();
+        const file = new File([blob], "אישור-חתום.pdf", { type: "application/pdf" });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            text: "שלום, מצורף המסמך החתום לאישור עבודה נוספת מענבר תעשיות פח",
+          });
+          return;
+        }
+      } catch {
+        // cancelled, or file sharing unsupported here — fall through to the wa.me link below
+      }
+    }
+
     const text = encodeURIComponent(
       `שלום, מצורף המסמך החתום לאישור עבודה נוספת מענבר תעשיות פח:\n${url}`,
     );
@@ -362,7 +386,8 @@ export default function ExceptionView({ backTo = "/home" }) {
     const wa = phone
       ? `https://wa.me/${phone}?text=${text}`
       : `https://wa.me/?text=${text}`;
-    if (win) win.location.href = wa;
+    const target = win || window.open("", "_blank");
+    if (target) target.location.href = wa;
     else window.open(wa, "_blank");
   }
 
