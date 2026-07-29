@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import Logo from '../components/Logo'
+import Lightbox from '../components/Lightbox'
 import { SpinnerIcon, AlertIcon, CheckCircleIcon } from '../components/Icons'
-import { supabase, SIGNED_DOC_BUCKET } from '../lib/supabase'
+import { supabase, SIGNED_DOC_BUCKET, exceptionPhotoUrl } from '../lib/supabase'
 import { formatDate, todayISO } from '../lib/format'
 
 const CONSENT_TEXT = 'אני מאשר/ת שקראתי את התוכן לעיל ומסכים/ה לחתום עליו'
@@ -82,6 +83,7 @@ export default function SignRequest() {
   const [consent, setConsent] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [lightbox, setLightbox] = useState(null)
   const canvasRef = useRef(null)
 
   useEffect(() => {
@@ -186,6 +188,27 @@ export default function SignRequest() {
             </p>
             <p className="whitespace-pre-wrap leading-relaxed">{data.work_description}</p>
             <p className="mt-3 font-bold text-accent">{daysText} ימי עבודה לחיוב</p>
+            {data.photos?.length > 0 && (
+              <div className="mt-4 grid grid-cols-3 gap-2.5">
+                {[...data.photos]
+                  .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+                  .map((p, i) => {
+                    const url = exceptionPhotoUrl(p.storage_path)
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setLightbox(url)}
+                        className="aspect-square rounded-xl overflow-hidden border border-border bg-muted hover:opacity-90 transition-opacity"
+                        aria-label="הגדלת תמונה"
+                      >
+                        <img src={url} alt="תמונה מהשטח" loading="lazy" className="h-full w-full object-cover" />
+                      </button>
+                    )
+                  })}
+              </div>
+            )}
+            {lightbox && <Lightbox src={lightbox} onClose={() => setLightbox(null)} />}
           </section>
 
           <section className="card p-5">
