@@ -68,7 +68,7 @@ function SignaturePad({ canvasRef, onChange }) {
         className="w-full rounded-xl border-2 border-dashed border-border bg-white touch-none"
         style={{ touchAction: 'none', aspectRatio: '520 / 200' }}
       />
-      <button type="button" className="btn btn-outline text-sm mt-2" onClick={clear}>
+      <button type="button" className="btn btn-outline !min-h-[32px] !px-3 text-xs mt-2" onClick={clear}>
         ניקוי וציור מחדש
       </button>
     </div>
