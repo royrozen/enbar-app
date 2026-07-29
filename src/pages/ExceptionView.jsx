@@ -379,8 +379,14 @@ export default function ExceptionView({ backTo = "/home" }) {
       }
     }
 
+    // Prefer the short /sign/:token link (points to the same document via
+    // our own idempotent "already signed" screen) over the long raw storage
+    // signed URL — same destination file, much shorter to paste into a chat.
+    // Only the manual-upload fallback (no signature_requests row at all)
+    // falls back to the long direct URL.
+    const shareUrl = sigReq?.token ? `${window.location.origin}/sign/${sigReq.token}` : url;
     const text = encodeURIComponent(
-      `שלום, מצורף המסמך החתום לאישור עבודה נוספת מענבר תעשיות פח:\n${url}`,
+      `שלום, מצורף המסמך החתום לאישור עבודה נוספת מענבר תעשיות פח:\n${shareUrl}`,
     );
     const phone = sharePhone.replace(/[^\d]/g, "").replace(/^0/, "972");
     const wa = phone

@@ -97,7 +97,10 @@ export default function SignRequest() {
         setState('expired')
         return
       }
-      if (row.status === 'expired' || new Date(row.expires_at) < new Date()) {
+      // Once signed, the link stays valid to re-view the document regardless
+      // of the original 7-day signing window -- only an unsigned request can
+      // actually expire.
+      if (row.status !== 'signed' && (row.status === 'expired' || new Date(row.expires_at) < new Date())) {
         setState('expired')
         return
       }
