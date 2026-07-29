@@ -63,7 +63,8 @@ export default function ExceptionView({ backTo = "/home" }) {
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfError, setPdfError] = useState("");
 
-  // SignWell e-signature send
+  // Self-hosted signature link send/resend
+  const [sigReq, setSigReq] = useState(null);
   const [signBusy, setSignBusy] = useState(false);
   const [signError, setSignError] = useState("");
   const [signingLink, setSigningLink] = useState("");
@@ -83,12 +84,40 @@ export default function ExceptionView({ backTo = "/home" }) {
         setLog(data);
         setSharePhone(data.projects?.phone || "");
       }
+      await loadSigReq();
     }
     load();
     return () => {
       cancelled = true;
     };
   }, [id]);
+
+  // Latest signature_requests row for this exception (superseded/expired
+  // rows are kept, never deleted — this is always the most recent attempt).
+  async function loadSigReq() {
+    const { data } = await supabase
+      .from("signature_requests")
+      .select("*")
+      .eq("exception_id", id)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    setSigReq(data?.[0] || null);
+  }
+
+  // Snapshot of the exception's editable content — compared against
+  // signature_requests.report_snapshot_hash to detect "was this edited since
+  // the link was created" (§3.4). Not a cryptographic hash, just an opaque
+  // deterministic string — the PRD explicitly allows "a hash (or simple ...
+  // comparison)" here.
+  function reportSnapshot(l) {
+    return JSON.stringify({
+      work_description: l.work_description,
+      billable_days: Number(l.billable_days),
+      workers_count: l.workers_count,
+      work_days: l.work_days,
+      days_overridden: l.days_overridden,
+    });
+  }
 
   const locked = log?.status === "approved";
   const photos = [...(log?.exception_photos || [])].sort(
@@ -107,6 +136,7 @@ export default function ExceptionView({ backTo = "/home" }) {
       .eq("id", id)
       .single();
     if (data) setLog(data);
+    await loadSigReq();
   }
 
   function startEdit() {
@@ -204,15 +234,6 @@ export default function ExceptionView({ backTo = "/home" }) {
     }
   }
 
-  function blobToBase64(blob) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  }
-
   // Step 1: generate the PDF, upload it (sets pdf_path), open it for
   // review. Does not send anything yet — the send button only appears
   // once pdf_path exists (see JSX below), so the manager always reviews
@@ -247,29 +268,53 @@ export default function ExceptionView({ backTo = "/home" }) {
     }
   }
 
-  // Step 2: send the already-generated, already-reviewed PDF (log.pdf_path)
-  // to SignWell for signature, then open WhatsApp with the signing link.
-  // Only enabled once a PDF exists. Safe to click again after "sent" —
-  // creates a fresh SignWell document each time, same file.
+  // Step 2: create (or resend) the signing link, then open WhatsApp with it.
+  // Only enabled once a PDF exists. Resend rule (§3.4):
+  //  - existing link still within its 7-day window (expires_at > now) and
+  //    content unchanged since it was created -> reuse the same token.
+  //  - still within window but content changed -> expire the old token and
+  //    create a new one.
+  //  - past the 7-day window -> always create a new one, regardless of edits.
   async function sendForSignature() {
     if (!log || signBusy || locked || !log.pdf_path) return;
     setSignBusy(true);
     setSignError("");
     setSigningLink("");
     try {
-      const res0 = await fetch(exceptionDocPublicUrl());
-      const blob = await res0.blob();
-      const pdfBase64 = await blobToBase64(blob);
       const by = PROFILES[getProfile()] || "לא ידוע";
-      const res = await fetch("/api/extras/send-for-signature", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ exceptionId: log.id, pdfBase64, by }),
-      });
-      if (!res.ok) throw new Error("send failed");
-      const { signingUrl } = await res.json();
+      const currentSnapshot = reportSnapshot(log);
+      const existing = sigReq;
+      const existingLive = existing && existing.status !== "expired" && new Date(existing.expires_at) > new Date();
+
+      let token;
+      if (existingLive && existing.report_snapshot_hash === currentSnapshot) {
+        token = existing.token;
+      } else {
+        if (existingLive) {
+          const { error: expErr } = await supabase
+            .from("signature_requests")
+            .update({ status: "expired" })
+            .eq("id", existing.id);
+          if (expErr) throw expErr;
+        }
+        const { data: created, error: createErr } = await supabase
+          .from("signature_requests")
+          .insert({ exception_id: log.id, report_snapshot_hash: currentSnapshot })
+          .select()
+          .single();
+        if (createErr) throw createErr;
+        token = created.token;
+      }
+
+      const { error: updErr } = await supabase
+        .from("exception_logs")
+        .update({ status: "sent", status_updated_by: by })
+        .eq("id", log.id);
+      if (updErr) throw updErr;
+
       await refresh();
 
+      const signingUrl = `${window.location.origin}/sign/${token}`;
       const name = log.projects?.contact_person || log.projects?.clients?.name || "לקוח";
       const project = log.projects?.name || "";
       const text = encodeURIComponent(
@@ -506,21 +551,26 @@ export default function ExceptionView({ backTo = "/home" }) {
                 {log.pdf_path && (
                   <button
                     type="button"
-                    className={`btn w-full sm:w-auto ${log.status === "sent" ? "btn-outline" : "btn-accent"}`}
+                    className={`btn w-full sm:w-auto ${sigReq ? "btn-outline" : "btn-accent"}`}
                     onClick={sendForSignature}
                     disabled={signBusy || locked}
                   >
                     {signBusy ? <SpinnerIcon size={18} /> : <SendIcon size={18} />}
-                    {log.status === "sent"
-                      ? "שליחה חוזרת לחתימה"
-                      : "שליחה לחתימה"}
+                    {sigReq ? "שליחה חוזרת לחתימה" : "שליחה לחתימה"}
                   </button>
                 )}
                 {signError && <p className="err !mt-0">{signError}</p>}
 
-                {log.status === "sent" && (
+                {sigReq && sigReq.status !== "signed" && (
                   <p className="text-sm font-bold text-blue-800">
-                    נשלח לחתימה — ממתין לחתימת הלקוח
+                    {sigReq.status === "expired"
+                      ? "הקישור פג תוקף — יש לשלוח קישור חדש"
+                      : `ממתין לחתימת הלקוח (הקישור נשלח ב-${formatDate(sigReq.created_at)})`}
+                  </p>
+                )}
+                {sigReq?.status === "signed" && (
+                  <p className="text-sm font-bold text-emerald-800">
+                    נחתם ב-{formatDate(sigReq.signed_at)}
                   </p>
                 )}
 

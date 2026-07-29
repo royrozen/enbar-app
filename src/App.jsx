@@ -14,6 +14,7 @@ import ManagerParts from './pages/ManagerParts'
 import ExceptionNew from './pages/ExceptionNew'
 import ExceptionView from './pages/ExceptionView'
 import ManagerExceptions from './pages/ManagerExceptions'
+import SignRequest from './pages/SignRequest'
 
 function AuthLoading() {
   return (
@@ -53,6 +54,7 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/" element={<Login />} />
+        <Route path="/sign/:token" element={<SignRequest />} />
         <Route path="/home" element={<RequireProfile><Home /></RequireProfile>} />
         <Route path="/history" element={<RequireProfile><History /></RequireProfile>} />
         <Route path="/report/new" element={<RequireProfile><ReportNew /></RequireProfile>} />

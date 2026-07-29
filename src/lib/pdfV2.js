@@ -115,17 +115,18 @@ const CONTENT_WIDTH = 515
 
 // Everything from the billable-days stat box through the signature block is
 // pinned to a fixed page position via absolutePosition — NOT left in normal
-// flow — same reason as pdf.js's approvalBlock: SignWell's e-signature
-// integration (api/_lib/signwell.js) places its signature/date/name fields
-// at hard-coded coordinates, which only line up if this block lands in the
-// same place on every generated PDF. work_description is capped at
-// MAX_EXCEPTION_DESCRIPTION_LENGTH (300 chars, src/lib/format.js) — measured
-// empirically, the description card above this anchor varies by at most
-// ~15pt between a one-line and a full 300-char description, well inside the
-// margin reserved here, plus room for up to 3 field photos (photoStrip())
-// inserted in normal flow between the description and this anchor. If
-// ANCHOR_Y or the internal layout below change, SIGNWELL_FIELDS in
-// api/_lib/signwell.js must be re-measured to match.
+// flow — this used to matter because SignWell's e-signature integration
+// placed its signature/date/name fields at hard-coded coordinates that only
+// lined up if this block landed in the same place on every generated PDF;
+// that integration is gone (replaced by the self-hosted /sign/:token flow,
+// which stamps directly into this same layout instead), but the fixed
+// position is kept since the layout math below is written against it.
+// work_description is capped at MAX_EXCEPTION_DESCRIPTION_LENGTH (300 chars,
+// src/lib/format.js) — measured empirically, the description card above this
+// anchor varies by at most ~15pt between a one-line and a full 300-char
+// description, well inside the margin reserved here, plus room for up to 3
+// field photos (photoStrip()) inserted in normal flow between the
+// description and this anchor.
 const ANCHOR_X = 40
 const ANCHOR_Y = 505
 
@@ -141,7 +142,11 @@ function detailCell(label, value) {
 
 // Billable-days stat box, declaration, and signature block — pinned as one
 // unit at (ANCHOR_X, ANCHOR_Y), see the comment on ANCHOR_Y above.
-function approvalBlock(daysText) {
+// stamp (optional): { signatureDataUrl, signedDateText, fullName, consentText }
+// from the client-signature flow (src/pages/SignRequest.jsx) — when present,
+// the previously-blank date/name/signature slots are filled with the actual
+// signed values instead of being left empty for a physical/manual signature.
+function approvalBlock(daysText, stamp) {
   return {
     absolutePosition: { x: ANCHOR_X, y: ANCHOR_Y },
     width: CONTENT_WIDTH,
@@ -218,7 +223,7 @@ function approvalBlock(daysText) {
         columns: [
           {
             width: 120,
-            table: { widths: ['*'], body: [[{ text: '', alignment: 'right' }]] },
+            table: { widths: ['*'], body: [[{ text: stamp ? rtl(stamp.signedDateText) : '', alignment: 'right' }]] },
             layout: {
               hLineWidth: (i) => (i === 1 ? 1 : 0),
               vLineWidth: () => 0,
@@ -234,7 +239,7 @@ function approvalBlock(daysText) {
           { width: 24, text: '' },
           {
             width: 205,
-            table: { widths: ['*'], body: [[{ text: '', alignment: 'right' }]] },
+            table: { widths: ['*'], body: [[{ text: stamp?.fullName ? rtl(stamp.fullName) : '', alignment: 'right' }]] },
             layout: {
               hLineWidth: (i) => (i === 1 ? 1 : 0),
               vLineWidth: () => 0,
@@ -256,18 +261,29 @@ function approvalBlock(daysText) {
           { width: '*', text: '' },
           {
             width: 190,
-            stack: [
-              {
-                canvas: [
-                  { type: 'rect', x: 0, y: 0, w: 190, h: 48, lineWidth: 1, lineColor: GREY, dash: { length: 3, space: 2 } },
+            stack: stamp
+              ? [{ image: stamp.signatureDataUrl, width: 180, height: 44, margin: [5, 2, 5, 2] }]
+              : [
+                  {
+                    canvas: [
+                      { type: 'rect', x: 0, y: 0, w: 190, h: 48, lineWidth: 1, lineColor: GREY, dash: { length: 3, space: 2 } },
+                    ],
+                  },
+                  { text: rtl('חתימת הלקוח'), fontSize: 8, color: GREY, alignment: 'right', margin: [8, -42, 8, 0] },
                 ],
-              },
-              { text: rtl('חתימת הלקוח'), fontSize: 8, color: GREY, alignment: 'right', margin: [8, -42, 8, 0] },
-            ],
           },
         ],
       },
-    ],
+      stamp
+        ? {
+            text: rtl(`נחתם דיגיטלית בתאריך ${stamp.signedDateText} · ${stamp.consentText}`),
+            fontSize: 7,
+            color: GREY,
+            alignment: 'center',
+            margin: [0, 8, 0, 0],
+          }
+        : null,
+    ].filter(Boolean),
   }
 }
 
@@ -275,7 +291,11 @@ function approvalBlock(daysText) {
 // (optional, [{ storage_path, sort_order }]), projects { name, city, clients
 // { name } }. Returns a Promise<Blob>. Never triggers a browser download
 // itself (see pdf.js's note on pdfmake's .download() on mobile Safari).
-export async function generateExceptionPdfV2(exception) {
+// signatureStamp (optional): { signatureDataUrl, signedDateText, fullName,
+// consentText } — passed by the /sign/:token flow (SignRequest.jsx) to
+// produce the final signed document from the same template used for the
+// manager's pre-send review copy.
+export async function generateExceptionPdfV2(exception, signatureStamp = null) {
   const project = exception.projects || {}
   const client = project.clients || {}
   const description = (exception.work_description || '').trim()
@@ -415,7 +435,7 @@ export async function generateExceptionPdfV2(exception) {
 
       photos,
 
-      approvalBlock(daysText),
+      approvalBlock(daysText, signatureStamp),
     ].filter(Boolean),
   }
 
