@@ -21,6 +21,7 @@ import {
   supabase,
   exceptionPhotoUrl,
   signedDocUrl,
+  SHARE_EXPIRY,
   EXCEPTION_PHOTO_BUCKET,
   EXCEPTION_DOC_BUCKET,
   SIGNED_DOC_BUCKET,
@@ -297,8 +298,18 @@ export default function ExceptionView({ backTo = "/home" }) {
     }
   }
 
-  function shareSignedDocWhatsApp() {
-    const url = signedDocUrl(log.signed_path);
+  async function viewSignedDoc() {
+    const win = window.open("", "_blank");
+    const url = await signedDocUrl(log.signed_path);
+    if (win) win.location.href = url;
+    else window.open(url, "_blank");
+  }
+
+  async function shareSignedDocWhatsApp() {
+    // open synchronously (still inside the click gesture) so popup blockers don't
+    // kill it once we're past the await below
+    const win = window.open("", "_blank");
+    const url = await signedDocUrl(log.signed_path, SHARE_EXPIRY);
     const text = encodeURIComponent(
       `שלום, מצורף המסמך החתום לאישור עבודה נוספת מענבר תעשיות פח:\n${url}`,
     );
@@ -306,7 +317,8 @@ export default function ExceptionView({ backTo = "/home" }) {
     const wa = phone
       ? `https://wa.me/${phone}?text=${text}`
       : `https://wa.me/?text=${text}`;
-    window.open(wa, "_blank");
+    if (win) win.location.href = wa;
+    else window.open(wa, "_blank");
   }
 
   function exceptionDocPublicUrl() {
@@ -551,15 +563,14 @@ export default function ExceptionView({ backTo = "/home" }) {
                 </p>
                 {log.signed_path ? (
                   <div className="flex items-center gap-3 flex-wrap">
-                    <a
-                      href={signedDocUrl(log.signed_path)}
-                      target="_blank"
-                      rel="noreferrer"
+                    <button
+                      type="button"
                       className="btn btn-outline"
+                      onClick={viewSignedDoc}
                     >
                       <FileTextIcon size={18} />
                       צפייה במסמך החתום
-                    </a>
+                    </button>
                     {log.status === "approved" && (
                       <button
                         type="button"

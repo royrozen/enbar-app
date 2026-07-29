@@ -13,14 +13,31 @@ export const SIGNED_DOC_BUCKET = 'signed-approvals'
 export const EXCEPTION_PHOTO_BUCKET = 'exception-photos'
 export const EXCEPTION_DOC_BUCKET = 'exception-docs'
 
-export function photoUrl(storagePath) {
-  return supabase.storage.from(PHOTO_BUCKET).getPublicUrl(storagePath).data.publicUrl
+export const IN_APP_EXPIRY = 300 // 5 min — viewed immediately after generation
+export const SHARE_EXPIRY = 86400 // 24h — baked into a WhatsApp message opened later
+
+export async function photoUrl(storagePath, expiresIn = IN_APP_EXPIRY) {
+  const { data, error } = await supabase.storage.from(PHOTO_BUCKET).createSignedUrl(storagePath, expiresIn)
+  if (error) throw error
+  return data.signedUrl
 }
 
-export function signedDocUrl(storagePath) {
-  return supabase.storage.from(SIGNED_DOC_BUCKET).getPublicUrl(storagePath).data.publicUrl
+export async function photoUrls(storagePaths, expiresIn = IN_APP_EXPIRY) {
+  if (!storagePaths.length) return {}
+  const { data, error } = await supabase.storage.from(PHOTO_BUCKET).createSignedUrls(storagePaths, expiresIn)
+  if (error) throw error
+  const map = {}
+  data.forEach((d, i) => { map[storagePaths[i]] = d.signedUrl })
+  return map
 }
 
+export async function signedDocUrl(storagePath, expiresIn = IN_APP_EXPIRY) {
+  const { data, error } = await supabase.storage.from(SIGNED_DOC_BUCKET).createSignedUrl(storagePath, expiresIn)
+  if (error) throw error
+  return data.signedUrl
+}
+
+// exception-photos stays public this phase (see Phase 3 PRD Non-Goals) — unchanged.
 export function exceptionPhotoUrl(storagePath) {
   return supabase.storage.from(EXCEPTION_PHOTO_BUCKET).getPublicUrl(storagePath).data.publicUrl
 }

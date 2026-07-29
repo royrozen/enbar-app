@@ -11,7 +11,7 @@ import {
   PackageIcon,
   SearchIcon,
 } from "../components/Icons";
-import { supabase, photoUrl } from "../lib/supabase";
+import { supabase, photoUrls } from "../lib/supabase";
 import { formatDate, todayISO, daysAgoISO } from "../lib/format";
 
 const defaultFilters = () => ({
@@ -34,6 +34,7 @@ export default function ManagerDashboard() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [thumbUrls, setThumbUrls] = useState({});
 
   const loadMeta = useCallback(async () => {
     // "Reports today" counts by submission time (created_at), not report_date —
@@ -109,16 +110,29 @@ export default function ManagerDashboard() {
     loadReports();
   }, [loadReports]);
 
+  useEffect(() => {
+    if (!reports?.length) return;
+    const paths = reports.map(firstThumbPath).filter(Boolean);
+    if (!paths.length) return;
+    let cancelled = false;
+    photoUrls(paths).then((map) => {
+      if (!cancelled) setThumbUrls(map);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reports]);
+
   function refresh() {
     loadMeta();
     loadReports();
   }
 
-  function firstThumb(r) {
+  function firstThumbPath(r) {
     const sorted = [...(r.report_photos || [])].sort(
       (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0),
     );
-    return sorted[0] ? photoUrl(sorted[0].storage_path) : null;
+    return sorted[0]?.storage_path || null;
   }
 
   const q = search.trim();
@@ -307,7 +321,7 @@ export default function ManagerDashboard() {
         ) : (
           <ul className="mt-4 flex flex-col gap-3">
             {visibleReports.map((r) => {
-              const thumb = firstThumb(r);
+              const thumb = thumbUrls[firstThumbPath(r)];
               return (
                 <li key={r.id}>
                   <Link
