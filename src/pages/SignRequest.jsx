@@ -80,6 +80,7 @@ export default function SignRequest() {
   const [state, setState] = useState('loading') // loading | expired | signed | form | done
   const [data, setData] = useState(null)
   const [hasSignature, setHasSignature] = useState(false)
+  const [fullName, setFullName] = useState('')
   const [consent, setConsent] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
@@ -100,6 +101,7 @@ export default function SignRequest() {
         return
       }
       setData(row)
+      setFullName(row.contact_person || row.client_name || '')
       setState(row.status === 'signed' ? 'signed' : 'form')
     }
     load()
@@ -109,7 +111,7 @@ export default function SignRequest() {
   }, [token])
 
   async function submit() {
-    if (submitting || !hasSignature || !consent) return
+    if (submitting || !hasSignature || !consent || !fullName.trim()) return
     setSubmitting(true)
     setSubmitError('')
     try {
@@ -126,7 +128,7 @@ export default function SignRequest() {
       const blob = await generateExceptionPdfV2(exceptionData, {
         signatureDataUrl,
         signedDateText,
-        fullName: data.contact_person || data.client_name,
+        fullName: fullName.trim(),
         consentText: CONSENT_TEXT,
       })
 
@@ -213,6 +215,19 @@ export default function SignRequest() {
 
           <section className="card p-5">
             <h2 className="font-bold mb-3">חתימה</h2>
+
+            <label className="label" htmlFor="signer-name">
+              שם מלא של החותם/ת <span className="text-destructive">*</span>
+            </label>
+            <input
+              id="signer-name"
+              type="text"
+              className="input mb-4"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="שם מלא"
+            />
+
             <SignaturePad canvasRef={canvasRef} onChange={setHasSignature} />
 
             <label className="flex items-start gap-2 mt-4 cursor-pointer">
@@ -230,7 +245,7 @@ export default function SignRequest() {
             <button
               type="button"
               className="btn btn-accent w-full !min-h-[56px] mt-4"
-              disabled={!hasSignature || !consent || submitting}
+              disabled={!hasSignature || !consent || !fullName.trim() || submitting}
               onClick={submit}
             >
               {submitting ? <SpinnerIcon size={20} /> : 'שליחת האישור'}
