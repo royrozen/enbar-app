@@ -68,7 +68,9 @@
       "Bash(mkdir -p \"/private/tmp/claude-501/-Users-royrozentouler-Enbar--enbar-app/85c5e25f-1801-4f62-8a3e-fc917806399b/scratchpad/vsix\")",
       "Bash(shasum -a 256 rtl-for-vs-code-agents-10.2.0.vsix)",
       "Bash(node gen_v11.cjs 200)",
-      "Bash(sips -s format png v11.pdf --out v11.png)"
+      "Bash(sips -s format png v11.pdf --out v11.png)",
+      "mcp__b9149b6d-0699-4485-8a2e-3458653e6cac__execute_sql",
+      "Bash(git fetch *)"
     ]
   }
 }
