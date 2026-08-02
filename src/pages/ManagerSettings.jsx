@@ -574,13 +574,50 @@ function ClientsTab() {
 function LeadsTab() {
   const { items, error, setError, load, toggleActive, softDelete } = useAdminList(
     'team_leads',
-    '*, profiles(phone, role)',
+    '*, profiles(id, phone, role)',
   )
   const [showAdd, setShowAdd] = useState(false)
   const [name, setName] = useState('')
   const [formError, setFormError] = useState('')
   const [busy, setBusy] = useState(false)
   const [deleteBusy, setDeleteBusy] = useState(false)
+
+  const [editingLeadId, setEditingLeadId] = useState(null)
+  const [leadEditForm, setLeadEditForm] = useState({ name: '', phone: '' })
+  const [leadEditError, setLeadEditError] = useState('')
+  const [leadEditBusy, setLeadEditBusy] = useState(false)
+
+  function startLeadEdit(lead, linkedProfile) {
+    setEditingLeadId(lead.id)
+    setLeadEditForm({ name: lead.name, phone: linkedProfile?.phone || '' })
+    setLeadEditError('')
+  }
+
+  async function saveLeadEdit(lead, linkedProfile) {
+    if (!leadEditForm.name.trim()) {
+      setLeadEditError('יש להזין שם ראש צוות')
+      return
+    }
+    setLeadEditBusy(true)
+    const { error: nameErr } = await supabase
+      .from('team_leads')
+      .update({ name: leadEditForm.name.trim() })
+      .eq('id', lead.id)
+    let phoneErr = null
+    if (!nameErr && linkedProfile && leadEditForm.phone.trim()) {
+      ;({ error: phoneErr } = await supabase
+        .from('profiles')
+        .update({ phone: leadEditForm.phone.trim() })
+        .eq('id', linkedProfile.id))
+    }
+    setLeadEditBusy(false)
+    if (nameErr || phoneErr) {
+      setLeadEditError('השמירה נכשלה — נסו שוב')
+      return
+    }
+    setEditingLeadId(null)
+    load()
+  }
 
   const activeCount = (items || []).filter((l) => l.is_active).length
 
@@ -642,27 +679,63 @@ function LeadsTab() {
           const linkedProfile = Array.isArray(l.profiles) ? l.profiles[0] : l.profiles
           return (
             <li key={l.id} className={`card p-4 flex items-center gap-3 flex-wrap ${l.is_active ? '' : 'opacity-55'}`}>
-              <div className="flex-1 min-w-0">
-                <p className="font-bold truncate">
-                  {l.name}
-                  {!l.is_active && <span className="text-xs text-primary font-normal ms-2">(מושבת)</span>}
-                </p>
-                <p className="text-xs text-primary mt-0.5" dir="ltr">
-                  {linkedProfile ? linkedProfile.phone : 'אין משתמש מקושר'}
-                </p>
-              </div>
-              <ActiveToggle item={l} onToggle={() => toggleActive(l)} />
-              <DeleteAction
-                name={l.name}
-                onConfirm={async () => {
-                  setDeleteBusy(true)
-                  await softDelete(l)
-                  setDeleteBusy(false)
-                }}
-                busy={deleteBusy}
-                disabled={lastActive}
-                disabledTitle="לא ניתן למחוק את ראש הצוות הפעיל האחרון — הדוחות משויכים אליו"
-              />
+              {editingLeadId === l.id ? (
+                <div className="flex-1 min-w-[240px] grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="label !text-xs">שם ראש הצוות *</label>
+                    <input className="input !min-h-[44px]" value={leadEditForm.name}
+                      onChange={(e) => setLeadEditForm((f) => ({ ...f, name: e.target.value }))}
+                      autoFocus />
+                  </div>
+                  <div>
+                    <label className="label !text-xs">טלפון</label>
+                    <input className="input !min-h-[44px]" dir="ltr" value={leadEditForm.phone}
+                      onChange={(e) => setLeadEditForm((f) => ({ ...f, phone: e.target.value }))}
+                      disabled={!linkedProfile} placeholder={linkedProfile ? '' : 'אין משתמש מקושר'} />
+                  </div>
+                  {leadEditError && <p className="err sm:col-span-2">{leadEditError}</p>}
+                  <div className="sm:col-span-2 flex gap-2">
+                    <button className="btn btn-outline text-sm !min-h-[40px]" disabled={leadEditBusy}
+                      onClick={() => saveLeadEdit(l, linkedProfile)} aria-label="שמירה">
+                      {leadEditBusy ? <SpinnerIcon size={16} /> : <CheckIcon size={16} />}
+                      שמירה
+                    </button>
+                    <button className="btn btn-ghost text-sm !min-h-[40px]" disabled={leadEditBusy}
+                      onClick={() => setEditingLeadId(null)} aria-label="ביטול">
+                      <XIcon size={16} />
+                      ביטול
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold truncate">
+                      {l.name}
+                      {!l.is_active && <span className="text-xs text-primary font-normal ms-2">(מושבת)</span>}
+                    </p>
+                    <p className="text-xs text-primary mt-0.5" dir="ltr">
+                      {linkedProfile ? linkedProfile.phone : 'אין משתמש מקושר'}
+                    </p>
+                  </div>
+                  <button className="btn btn-ghost text-sm !min-h-[40px]"
+                    onClick={() => startLeadEdit(l, linkedProfile)} aria-label="עריכת ראש צוות">
+                    <PencilIcon size={16} />
+                  </button>
+                  <ActiveToggle item={l} onToggle={() => toggleActive(l)} />
+                  <DeleteAction
+                    name={l.name}
+                    onConfirm={async () => {
+                      setDeleteBusy(true)
+                      await softDelete(l)
+                      setDeleteBusy(false)
+                    }}
+                    busy={deleteBusy}
+                    disabled={lastActive}
+                    disabledTitle="לא ניתן למחוק את ראש הצוות הפעיל האחרון — הדוחות משויכים אליו"
+                  />
+                </>
+              )}
             </li>
           )
         })}
