@@ -13,6 +13,7 @@ import {
   ChevronDownIcon,
 } from '../components/Icons'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../lib/AuthContext'
 
 const TABS = [
   { key: 'clients', label: 'לקוחות', Icon: UsersIcon },
@@ -576,8 +577,10 @@ function LeadsTab() {
     'team_leads',
     '*, profiles(id, phone, role)',
   )
+  const { session } = useAuth()
   const [showAdd, setShowAdd] = useState(false)
   const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
   const [formError, setFormError] = useState('')
   const [busy, setBusy] = useState(false)
   const [deleteBusy, setDeleteBusy] = useState(false)
@@ -627,15 +630,37 @@ function LeadsTab() {
       setFormError('יש להזין שם ראש צוות')
       return
     }
+    if (!phone.trim()) {
+      setFormError('יש להזין מספר טלפון')
+      return
+    }
     setFormError('')
     setBusy(true)
-    const { error: err } = await supabase.from('team_leads').insert({ name: name.trim() })
+    let res
+    try {
+      res = await fetch('/api/admin/create-team-lead', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ name: name.trim(), phone: phone.trim() }),
+      })
+    } catch {
+      res = null
+    }
     setBusy(false)
-    if (err) {
-      setFormError('הוספת ראש הצוות נכשלה — נסו שוב')
+    if (!res?.ok) {
+      const body = await res?.json().catch(() => null)
+      setFormError(
+        body?.error === 'invalid phone'
+          ? 'מספר טלפון לא תקין — יש להזין מספר נייד ישראלי'
+          : 'הוספת ראש הצוות נכשלה — נסו שוב',
+      )
       return
     }
     setName('')
+    setPhone('')
     setShowAdd(false)
     load()
   }
@@ -656,7 +681,10 @@ function LeadsTab() {
             <div className="flex-1 min-w-[220px]">
               <input className="input" value={name} onChange={(e) => setName(e.target.value)}
                 placeholder="שם ראש הצוות" aria-label="שם ראש הצוות" autoFocus />
-              {formError && <p className="err">{formError}</p>}
+            </div>
+            <div className="flex-1 min-w-[220px]">
+              <input className="input" dir="ltr" value={phone} onChange={(e) => setPhone(e.target.value)}
+                placeholder="050-1234567" aria-label="מספר טלפון" />
             </div>
             <button className="btn btn-accent" disabled={busy}>
               {busy ? <SpinnerIcon size={18} /> : <PlusIcon size={18} />}
@@ -666,9 +694,7 @@ function LeadsTab() {
               ביטול
             </button>
           </div>
-          <p className="text-xs text-primary mt-2">
-            שימו לב: חיבור מספר טלפון וגישה למערכת עבור ראש צוות חדש נעשה ידנית על ידי מנהל טכני
-          </p>
+          {formError && <p className="err mt-2">{formError}</p>}
         </form>
       )}
 
