@@ -602,20 +602,29 @@ function LeadsTab() {
       return
     }
     setLeadEditBusy(true)
-    const { error: nameErr } = await supabase
-      .from('team_leads')
-      .update({ name: leadEditForm.name.trim() })
-      .eq('id', lead.id)
-    let phoneErr = null
-    if (!nameErr && linkedProfile && leadEditForm.phone.trim()) {
-      ;({ error: phoneErr } = await supabase
-        .from('profiles')
-        .update({ phone: leadEditForm.phone.trim() })
-        .eq('id', linkedProfile.id))
+    let res
+    try {
+      res = await fetch('/api/admin/update-team-lead', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          teamLeadId: lead.id,
+          name: leadEditForm.name.trim(),
+          phone: linkedProfile ? leadEditForm.phone.trim() : '',
+        }),
+      })
+    } catch {
+      res = null
     }
     setLeadEditBusy(false)
-    if (nameErr || phoneErr) {
-      setLeadEditError('השמירה נכשלה — נסו שוב')
+    if (!res?.ok) {
+      const body = await res?.json().catch(() => null)
+      setLeadEditError(
+        body?.error === 'invalid phone' ? 'מספר טלפון לא תקין — יש להזין מספר נייד ישראלי' : 'השמירה נכשלה — נסו שוב',
+      )
       return
     }
     setEditingLeadId(null)
