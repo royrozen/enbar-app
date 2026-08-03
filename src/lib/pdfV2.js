@@ -300,7 +300,7 @@ export async function generateExceptionPdfV2(exception, signatureStamp = null) {
   const client = project.clients || {}
   const description = (exception.work_description || '').trim()
   const days = Number(exception.billable_days)
-  const daysText = `${days % 1 === 0 ? days : days.toFixed(1)} ימי עבודה`
+  const daysText = `${days} ימי עבודה`
 
   let logoImage
   try {

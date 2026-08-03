@@ -28,7 +28,7 @@ import {
 } from "../lib/supabase";
 import { formatDate, MAX_EXCEPTION_DESCRIPTION_LENGTH } from "../lib/format";
 import { getProfile, PROFILES } from "../lib/profile";
-import { autoBillableDays } from "./ExceptionNew";
+import { autoBillableDays, isHalfDayStep } from "./ExceptionNew";
 
 const MAX_PHOTOS = 3;
 const SELECT =
@@ -124,7 +124,7 @@ export default function ExceptionView({ backTo = "/home" }) {
     (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0),
   );
   const days = log ? Number(log.billable_days) : 0;
-  const daysText = days % 1 === 0 ? String(days) : days.toFixed(1);
+  const daysText = String(days);
   const billableDaysEdit = daysOverridden
     ? manualDays
     : autoBillableDays(workers, workDays);
@@ -158,8 +158,8 @@ export default function ExceptionView({ backTo = "/home" }) {
     if (!Number.isInteger(w) || w < 1 || w > 50)
       errs.workers = "מספר העובדים חייב להיות בין 1 ל־50";
     const d = Number(workDays);
-    if (!Number.isInteger(d) || d < 1 || d > 99)
-      errs.workDays = "משך העבודה חייב להיות בין 1 ל־99 ימים";
+    if (!isHalfDayStep(d) || d < 0.5 || d > 99)
+      errs.workDays = "משך העבודה חייב להיות בין 0.5 ל־99 ימים, בקפיצות של חצי יום";
     if (desc.trim().length < 5)
       errs.desc = "יש להזין תיאור עבודה של 5 תווים לפחות";
     else if (desc.trim().length > MAX_EXCEPTION_DESCRIPTION_LENGTH)
@@ -743,18 +743,19 @@ export default function ExceptionView({ backTo = "/home" }) {
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setWorkDays(Math.max(1, Number(workDays) - 1))}
-                  disabled={saving || Number(workDays) <= 1}
-                  aria-label="הפחתת יום"
+                  onClick={() => setWorkDays(Math.max(0.5, Number(workDays) - 0.5))}
+                  disabled={saving || Number(workDays) <= 0.5}
+                  aria-label="הפחתת חצי יום"
                   className="btn btn-outline !min-h-[56px] !w-14 !px-0 !text-2xl shrink-0"
                 >
                   <MinusIcon size={26} />
                 </button>
                 <input
                   type="number"
-                  inputMode="numeric"
-                  min={1}
+                  inputMode="decimal"
+                  min={0.5}
                   max={99}
+                  step={0.5}
                   className="input text-center !text-2xl font-black !min-h-[56px]"
                   value={workDays}
                   onChange={(e) => setWorkDays(e.target.value)}
@@ -765,10 +766,10 @@ export default function ExceptionView({ backTo = "/home" }) {
                 <button
                   type="button"
                   onClick={() =>
-                    setWorkDays(Math.min(99, Number(workDays) + 1))
+                    setWorkDays(Math.min(99, Number(workDays) + 0.5))
                   }
                   disabled={saving || Number(workDays) >= 99}
-                  aria-label="הוספת יום"
+                  aria-label="הוספת חצי יום"
                   className="btn btn-outline !min-h-[56px] !w-14 !px-0 !text-2xl shrink-0"
                 >
                   <PlusIcon size={26} />
