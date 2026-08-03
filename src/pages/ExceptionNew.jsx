@@ -23,6 +23,11 @@ export function autoBillableDays(workers, workDays) {
   return w * 0.5 * d
 }
 
+export function isHalfDayStep(value) {
+  const n = Number(value)
+  return Number.isFinite(n) && Math.round(n * 2) === n * 2
+}
+
 function loadDraft() {
   try {
     return JSON.parse(localStorage.getItem(DRAFT_KEY)) || {}
@@ -124,7 +129,7 @@ export default function ExceptionNew() {
 
   function stepWorkDays(delta) {
     const d = Number(workDays) || 0
-    setWorkDays(Math.min(99, Math.max(1, d + delta)))
+    setWorkDays(Math.min(99, Math.max(0.5, d + delta)))
   }
 
   function startOverride() {
@@ -145,7 +150,8 @@ export default function ExceptionNew() {
     const w = Number(workers)
     if (!Number.isInteger(w) || w < 1 || w > 50) errs.workers = 'מספר העובדים חייב להיות בין 1 ל־50'
     const d = Number(workDays)
-    if (!Number.isInteger(d) || d < 1 || d > 99) errs.workDays = 'משך העבודה חייב להיות בין 1 ל־99 ימים'
+    if (!isHalfDayStep(d) || d < 0.5 || d > 99)
+      errs.workDays = 'משך העבודה חייב להיות בין 0.5 ל־99 ימים, בקפיצות של חצי יום'
     if (desc.trim().length < 5) errs.desc = 'יש להזין תיאור עבודה של 5 תווים לפחות'
     else if (desc.trim().length > MAX_EXCEPTION_DESCRIPTION_LENGTH)
       errs.desc = `התיאור ארוך מדי — עד ${MAX_EXCEPTION_DESCRIPTION_LENGTH} תווים (המסמך לחתימה חייב להישאר בעמוד אחד)`
@@ -360,18 +366,19 @@ export default function ExceptionNew() {
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => stepWorkDays(-1)}
-                disabled={submitting || Number(workDays) <= 1}
-                aria-label="הפחתת יום"
+                onClick={() => stepWorkDays(-0.5)}
+                disabled={submitting || Number(workDays) <= 0.5}
+                aria-label="הפחתת חצי יום"
                 className="btn btn-outline !min-h-[56px] !w-14 !px-0 !text-2xl shrink-0"
               >
                 <MinusIcon size={26} />
               </button>
               <input
                 type="number"
-                inputMode="numeric"
-                min={1}
+                inputMode="decimal"
+                min={0.5}
                 max={99}
+                step={0.5}
                 className="input text-center !text-2xl font-black !min-h-[56px]"
                 value={workDays}
                 onChange={(e) => setWorkDays(e.target.value)}
@@ -381,9 +388,9 @@ export default function ExceptionNew() {
               />
               <button
                 type="button"
-                onClick={() => stepWorkDays(1)}
+                onClick={() => stepWorkDays(0.5)}
                 disabled={submitting || Number(workDays) >= 99}
-                aria-label="הוספת יום"
+                aria-label="הוספת חצי יום"
                 className="btn btn-outline !min-h-[56px] !w-14 !px-0 !text-2xl shrink-0"
               >
                 <PlusIcon size={26} />

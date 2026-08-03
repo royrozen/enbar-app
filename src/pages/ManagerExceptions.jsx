@@ -151,7 +151,7 @@ export default function ManagerExceptions() {
           <ul className="mt-4 flex flex-col gap-3">
             {logs.map((l) => {
               const days = Number(l.billable_days)
-              const daysText = days % 1 === 0 ? String(days) : days.toFixed(1)
+              const daysText = String(days)
               return (
                 <li key={l.id}>
                   <Link
