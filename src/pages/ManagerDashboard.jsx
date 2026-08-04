@@ -10,6 +10,7 @@ import {
   ClipboardIcon,
   PackageIcon,
   SearchIcon,
+  UtensilsIcon,
 } from "../components/Icons";
 import { supabase, photoUrls } from "../lib/supabase";
 import { formatDate, todayISO, daysAgoISO } from "../lib/format";
@@ -160,7 +161,7 @@ export default function ManagerDashboard() {
         </div>
 
         {/* Status row */}
-        <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="card p-4 flex items-center gap-4">
             <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-primary">
               <ClipboardIcon size={24} />
@@ -200,6 +201,18 @@ export default function ManagerDashboard() {
               <p className="text-sm text-primary mt-1">
                 אישורי עבודה נוספת ממתינים
               </p>
+            </div>
+          </Link>
+          <Link
+            to="/manager/lunch-report"
+            className="card p-4 flex items-center gap-4 hover:border-accent transition-colors duration-200"
+          >
+            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-primary">
+              <UtensilsIcon size={24} />
+            </span>
+            <div>
+              <p className="text-sm font-bold leading-tight">דוח ארוחות</p>
+              <p className="text-sm text-primary mt-1">צהריים חודשי</p>
             </div>
           </Link>
         </div>

@@ -15,6 +15,9 @@ import ExceptionNew from './pages/ExceptionNew'
 import ExceptionView from './pages/ExceptionView'
 import ManagerExceptions from './pages/ManagerExceptions'
 import SignRequest from './pages/SignRequest'
+import Lunch from './pages/Lunch'
+import LunchToday from './pages/LunchToday'
+import ManagerLunchReport from './pages/ManagerLunchReport'
 
 function AuthLoading() {
   return (
@@ -55,6 +58,9 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/sign/:token" element={<SignRequest />} />
+        {/* No auth guards — self-service, phone-identified only (PRD v4 §2/§5) */}
+        <Route path="/lunch" element={<Lunch />} />
+        <Route path="/lunch/today" element={<LunchToday />} />
         <Route path="/home" element={<RequireProfile><Home /></RequireProfile>} />
         <Route path="/history" element={<RequireProfile><History /></RequireProfile>} />
         <Route path="/report/new" element={<RequireProfile><ReportNew /></RequireProfile>} />
@@ -67,6 +73,7 @@ export default function App() {
         <Route path="/manager/parts" element={<RequireManager><ManagerParts /></RequireManager>} />
         <Route path="/manager/exceptions" element={<RequireManager><ManagerExceptions /></RequireManager>} />
         <Route path="/manager/exceptions/:id" element={<RequireManager><ExceptionView backTo="/manager/exceptions" /></RequireManager>} />
+        <Route path="/manager/lunch-report" element={<RequireManager><ManagerLunchReport /></RequireManager>} />
         <Route path="/manager/settings" element={<RequireFactoryManager><ManagerSettings /></RequireFactoryManager>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

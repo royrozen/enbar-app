@@ -11,14 +11,18 @@ import {
   XIcon,
   TrashIcon,
   ChevronDownIcon,
+  UtensilsIcon,
 } from '../components/Icons'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
+import { normalizeEmployeePhone } from '../lib/lunch'
 
 const TABS = [
   { key: 'clients', label: 'לקוחות', Icon: UsersIcon },
   { key: 'leads', label: 'ראשי צוות', Icon: HardHatIcon },
   { key: 'catalog', label: 'קטלוג חלקים', Icon: PackageIcon },
+  { key: 'lunch-employees', label: 'עובדים (ארוחות)', Icon: UtensilsIcon },
+  { key: 'lunch-menu', label: 'תפריט ארוחות', Icon: UtensilsIcon },
 ]
 
 function ActiveToggle({ item, onToggle, busy }) {
@@ -946,6 +950,257 @@ function CatalogTab() {
   )
 }
 
+function LunchEmployeesTab() {
+  const { items, error, setError, load, toggleActive } = useAdminList(
+    'employees',
+    'id, name, phone, is_active, created_at',
+  )
+  const [showAdd, setShowAdd] = useState(false)
+  const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [formError, setFormError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const [editingId, setEditingId] = useState(null)
+  const [editForm, setEditForm] = useState({ name: '', phone: '' })
+  const [editError, setEditError] = useState('')
+  const [editBusy, setEditBusy] = useState(false)
+
+  async function add(e) {
+    e.preventDefault()
+    if (!name.trim()) {
+      setFormError('יש להזין שם')
+      return
+    }
+    const normalized = normalizeEmployeePhone(phone)
+    if (!normalized) {
+      setFormError('מספר טלפון לא תקין — יש להזין מספר נייד ישראלי')
+      return
+    }
+    setFormError('')
+    setBusy(true)
+    const { error: err } = await supabase.from('employees').insert({ name: name.trim(), phone: normalized })
+    setBusy(false)
+    if (err) {
+      setFormError(err.code === '23505' ? 'מספר טלפון זה כבר רשום במערכת' : 'ההוספה נכשלה — נסו שוב')
+      return
+    }
+    setName('')
+    setPhone('')
+    setShowAdd(false)
+    load()
+  }
+
+  function startEdit(item) {
+    setEditingId(item.id)
+    setEditForm({ name: item.name, phone: item.phone || '' })
+    setEditError('')
+  }
+
+  async function saveEdit(item) {
+    if (!editForm.name.trim()) {
+      setEditError('יש להזין שם')
+      return
+    }
+    const normalized = normalizeEmployeePhone(editForm.phone)
+    if (!normalized) {
+      setEditError('מספר טלפון לא תקין — יש להזין מספר נייד ישראלי')
+      return
+    }
+    setEditBusy(true)
+    const { error: err } = await supabase
+      .from('employees')
+      .update({ name: editForm.name.trim(), phone: normalized })
+      .eq('id', item.id)
+    setEditBusy(false)
+    if (err) {
+      setEditError(err.code === '23505' ? 'מספר טלפון זה כבר רשום במערכת' : 'השמירה נכשלה — נסו שוב')
+      return
+    }
+    setEditingId(null)
+    load()
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {!showAdd ? (
+        <div>
+          <button className="btn btn-accent" onClick={() => setShowAdd(true)}>
+            <PlusIcon size={18} />
+            הוספת עובד
+          </button>
+        </div>
+      ) : (
+        <form onSubmit={add} className="card p-4">
+          <h3 className="font-bold mb-3">הוספת עובד</h3>
+          <div className="flex gap-2 items-start flex-wrap">
+            <div className="flex-1 min-w-[220px]">
+              <input className="input" value={name} onChange={(e) => setName(e.target.value)}
+                placeholder="שם העובד" aria-label="שם העובד" autoFocus />
+            </div>
+            <div className="flex-1 min-w-[220px]">
+              <input className="input" dir="ltr" value={phone} onChange={(e) => setPhone(e.target.value)}
+                placeholder="050-1234567" aria-label="מספר טלפון" />
+            </div>
+            <button className="btn btn-accent" disabled={busy}>
+              {busy ? <SpinnerIcon size={18} /> : <PlusIcon size={18} />}
+              הוספה
+            </button>
+            <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setShowAdd(false)}>
+              ביטול
+            </button>
+          </div>
+          {formError && <p className="err mt-2">{formError}</p>}
+        </form>
+      )}
+
+      {error && <p className="err">{error}</p>}
+      <ul className="flex flex-col gap-2">
+        {(items || []).map((item) => (
+          <li key={item.id} className={`card p-4 flex items-center gap-3 flex-wrap ${item.is_active ? '' : 'opacity-55'}`}>
+            {editingId === item.id ? (
+              <div className="flex-1 min-w-[240px] grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="label !text-xs">שם *</label>
+                  <input className="input !min-h-[44px]" value={editForm.name}
+                    onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} autoFocus />
+                </div>
+                <div>
+                  <label className="label !text-xs">טלפון</label>
+                  <input className="input !min-h-[44px]" dir="ltr" value={editForm.phone}
+                    onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))} />
+                </div>
+                {editError && <p className="err sm:col-span-2">{editError}</p>}
+                <div className="sm:col-span-2 flex gap-2">
+                  <button className="btn btn-outline text-sm !min-h-[40px]" disabled={editBusy}
+                    onClick={() => saveEdit(item)} aria-label="שמירה">
+                    {editBusy ? <SpinnerIcon size={16} /> : <CheckIcon size={16} />}
+                    שמירה
+                  </button>
+                  <button className="btn btn-ghost text-sm !min-h-[40px]" disabled={editBusy}
+                    onClick={() => setEditingId(null)} aria-label="ביטול">
+                    <XIcon size={16} />
+                    ביטול
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold truncate">
+                    {item.name}
+                    {!item.is_active && <span className="text-xs text-primary font-normal ms-2">(מושבת)</span>}
+                  </p>
+                  <p className="text-xs text-primary" dir="ltr">{item.phone || '—'}</p>
+                </div>
+                <button className="btn btn-ghost text-sm !min-h-[40px]"
+                  onClick={() => startEdit(item)} aria-label="עריכת עובד">
+                  <PencilIcon size={16} />
+                </button>
+                <ActiveToggle item={item} onToggle={() => toggleActive(item)} />
+              </>
+            )}
+          </li>
+        ))}
+        {items?.length === 0 && <li className="card p-6 text-center text-primary">אין עובדים עדיין</li>}
+        {items === null && (
+          <li className="flex justify-center py-8 text-primary"><SpinnerIcon size={28} /></li>
+        )}
+      </ul>
+    </div>
+  )
+}
+
+const MENU_CATEGORY_LABELS = { main_dish: 'מנה עיקרית', addition: 'תוספת', salad: 'סלט' }
+
+function LunchMenuTab() {
+  const { items, error, setError, load, toggleActive } = useAdminList(
+    'lunch_menu_items',
+    'id, category, name, is_active, created_at',
+  )
+  const [showAdd, setShowAdd] = useState(false)
+  const [name, setName] = useState('')
+  const [category, setCategory] = useState('main_dish')
+  const [formError, setFormError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function add(e) {
+    e.preventDefault()
+    if (!name.trim()) {
+      setFormError('יש להזין שם')
+      return
+    }
+    setFormError('')
+    setBusy(true)
+    const { error: err } = await supabase.from('lunch_menu_items').insert({ name: name.trim(), category })
+    setBusy(false)
+    if (err) {
+      setFormError('ההוספה נכשלה — נסו שוב')
+      return
+    }
+    setName('')
+    setShowAdd(false)
+    load()
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {!showAdd ? (
+        <div>
+          <button className="btn btn-accent" onClick={() => setShowAdd(true)}>
+            <PlusIcon size={18} />
+            הוספת פריט
+          </button>
+        </div>
+      ) : (
+        <form onSubmit={add} className="card p-4">
+          <h3 className="font-bold mb-3">הוספת פריט לתפריט</h3>
+          <div className="flex gap-2 items-start flex-wrap">
+            <div className="flex-1 min-w-[220px]">
+              <input className="input" value={name} onChange={(e) => setName(e.target.value)}
+                placeholder="שם הפריט" aria-label="שם הפריט" autoFocus />
+            </div>
+            <select className="input flex-1 min-w-[160px]" value={category}
+              onChange={(e) => setCategory(e.target.value)} aria-label="קטגוריה">
+              {Object.entries(MENU_CATEGORY_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+            <button className="btn btn-accent" disabled={busy}>
+              {busy ? <SpinnerIcon size={18} /> : <PlusIcon size={18} />}
+              הוספה
+            </button>
+            <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setShowAdd(false)}>
+              ביטול
+            </button>
+          </div>
+          {formError && <p className="err mt-2">{formError}</p>}
+        </form>
+      )}
+
+      {error && <p className="err">{error}</p>}
+      <ul className="flex flex-col gap-2">
+        {(items || []).map((item) => (
+          <li key={item.id} className={`card p-4 flex items-center gap-3 flex-wrap ${item.is_active ? '' : 'opacity-55'}`}>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold truncate">
+                {item.name}
+                {!item.is_active && <span className="text-xs text-primary font-normal ms-2">(מושבת)</span>}
+              </p>
+              <p className="text-xs text-primary">{MENU_CATEGORY_LABELS[item.category]}</p>
+            </div>
+            <ActiveToggle item={item} onToggle={() => toggleActive(item)} />
+          </li>
+        ))}
+        {items?.length === 0 && <li className="card p-6 text-center text-primary">אין פריטים בתפריט עדיין</li>}
+        {items === null && (
+          <li className="flex justify-center py-8 text-primary"><SpinnerIcon size={28} /></li>
+        )}
+      </ul>
+    </div>
+  )
+}
+
 export default function ManagerSettings() {
   const [tab, setTab] = useState('clients')
 
@@ -979,6 +1234,8 @@ export default function ManagerSettings() {
           {tab === 'clients' && <ClientsTab />}
           {tab === 'leads' && <LeadsTab />}
           {tab === 'catalog' && <CatalogTab />}
+          {tab === 'lunch-employees' && <LunchEmployeesTab />}
+          {tab === 'lunch-menu' && <LunchMenuTab />}
         </div>
       </main>
     </div>
