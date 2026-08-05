@@ -261,7 +261,8 @@ export default function ExceptionView({ backTo = "/home" }) {
 
       const url = supabase.storage.from(EXCEPTION_DOC_BUCKET).getPublicUrl(path).data.publicUrl;
       window.open(url, "_blank");
-    } catch {
+    } catch (e) {
+      console.error("generatePdf failed:", e);
       setPdfError("הפקת הדוח נכשלה — נסו שוב");
     } finally {
       setPdfBusy(false);
