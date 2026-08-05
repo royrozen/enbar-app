@@ -206,7 +206,8 @@ export default function ExceptionNew() {
             .from('exception_photos')
             .insert({ exception_id: log.id, storage_path: path, sort_order: i })
           if (rowErr) throw rowErr
-        } catch {
+        } catch (err) {
+          console.error('exception photo upload failed', err)
           failed++
         }
       }

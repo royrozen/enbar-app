@@ -125,7 +125,8 @@ export default function ReportView() {
             .from('report_photos')
             .insert({ report_id: report.id, storage_path: path, kind: p.kind, sort_order: startSort + i })
           if (rowErr) throw rowErr
-        } catch {
+        } catch (err) {
+          console.error('report photo upload failed', err)
           failed++
         }
       }
