@@ -1,0 +1,15 @@
+-- Production hotfix (2026-08-06): same gap as
+-- 20260805050000_authenticated_upload_exception_docs.sql, one bucket over.
+-- The "anon upload exception-photos" INSERT policy on storage.objects was
+-- still {anon} only on prod — a leftover from before real auth existed.
+-- 20260728130000_rls_allow_authenticated.sql widened it to
+-- {anon,authenticated} on dev but was never applied to prod, so a logged-in
+-- team lead uploading an exception photo (ExceptionNew.jsx submit()) runs as
+-- `authenticated`, has no applicable INSERT policy, and the upload fails
+-- with "new row violates row-level security policy" — surfaced to the user
+-- as the generic "בעיית רשת" (network issue) message.
+--
+-- Brings prod back in sync with dev, not a new grant: the anon policy was
+-- already fully open (bucket_id match only, no other condition), so this
+-- doesn't widen access beyond what anon already had.
+alter policy "anon upload exception-photos" on storage.objects to anon, authenticated;

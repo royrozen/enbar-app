@@ -93,6 +93,14 @@ export default function Header({ backTo, title }) {
                 דוחות
               </NavLink>
               <NavLink
+                to="/manager/my-reports"
+                className={({ isActive }) =>
+                  `btn btn-ghost text-sm ${isActive ? '!text-accent font-black' : ''}`
+                }
+              >
+                הדוחות שלי
+              </NavLink>
+              <NavLink
                 to="/manager/settings"
                 className={({ isActive }) =>
                   `btn btn-ghost text-sm ${isActive ? '!text-accent font-black' : ''}`
@@ -105,7 +113,7 @@ export default function Header({ backTo, title }) {
           {role && !viewAsTeamLead && isManager && (
             <details className="relative">
               <summary className="text-xs text-primary font-medium border border-border rounded-full px-2.5 py-1 bg-muted cursor-pointer list-none select-none">
-                {PROFILES[role]}
+                {profile.display_name || PROFILES[role]}
               </summary>
               <div className="absolute end-0 mt-2 w-52 rounded-xl border border-border bg-white shadow-lg py-1 z-30">
                 {teamLeads?.length > 0 ? (
@@ -127,7 +135,7 @@ export default function Header({ backTo, title }) {
           )}
           {role && !viewAsTeamLead && !isManager && (
             <span className="text-xs text-primary font-medium hidden md:inline border border-border rounded-full px-2.5 py-1 bg-muted">
-              {PROFILES[role]}
+              {profile.display_name || PROFILES[role]}
             </span>
           )}
           <button className="btn btn-ghost text-sm" onClick={logout}>

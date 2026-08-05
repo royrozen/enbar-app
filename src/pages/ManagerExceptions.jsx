@@ -69,7 +69,7 @@ export default function ManagerExceptions() {
   }
 
   return (
-    <div className="min-h-dvh">
+    <div className="min-h-dvh manager-desktop">
       <Header backTo="/manager" title="אישורי עבודה נוספת" />
       <main className="mx-auto max-w-5xl px-4 py-6">
         <div className="flex items-center justify-between gap-3 flex-wrap">

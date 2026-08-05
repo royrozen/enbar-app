@@ -12,7 +12,6 @@ import {
   PencilIcon,
   PlusIcon,
   MinusIcon,
-  UploadIcon,
   FileTextIcon,
   SendIcon,
   ClipboardIcon,
@@ -24,7 +23,6 @@ import {
   SHARE_EXPIRY,
   EXCEPTION_PHOTO_BUCKET,
   EXCEPTION_DOC_BUCKET,
-  SIGNED_DOC_BUCKET,
 } from "../lib/supabase";
 import { formatDate, MAX_EXCEPTION_DESCRIPTION_LENGTH } from "../lib/format";
 import { getProfile, PROFILES } from "../lib/profile";
@@ -56,8 +54,6 @@ export default function ExceptionView({ backTo = "/home" }) {
 
   // Share / signed state
   const [sharePhone, setSharePhone] = useState("");
-  const [docUploading, setDocUploading] = useState(false);
-  const [docError, setDocError] = useState("");
 
   // PDF generation (review step, before sending)
   const [pdfBusy, setPdfBusy] = useState(false);
@@ -404,43 +400,6 @@ export default function ExceptionView({ backTo = "/home" }) {
       .getPublicUrl(log.pdf_path).data.publicUrl;
   }
 
-  async function uploadSignedDoc(e) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file || docUploading || locked || !log.pdf_path) return;
-    setDocUploading(true);
-    setDocError("");
-    try {
-      const ext = file.name.split(".").pop() || "pdf";
-      const path = `exceptions/${log.id}/signed-${crypto.randomUUID()}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from(SIGNED_DOC_BUCKET)
-        .upload(path, file, { contentType: file.type || "application/pdf" });
-      if (upErr) throw upErr;
-      const by = PROFILES[getProfile()] || "לא ידוע";
-      // Uploading the signed form IS the approval (PRD D2) — atomic with the path.
-      const { error: updErr } = await supabase
-        .from("exception_logs")
-        .update({
-          signed_path: path,
-          status: "approved",
-          status_updated_by: by,
-        })
-        .eq("id", log.id);
-      if (updErr) throw updErr;
-      setLog((l) => ({
-        ...l,
-        signed_path: path,
-        status: "approved",
-        status_updated_by: by,
-      }));
-    } catch {
-      setDocError("העלאת המסמך נכשלה — נסו שוב");
-    } finally {
-      setDocUploading(false);
-    }
-  }
-
   return (
     <div className={`min-h-dvh ${editing ? "pb-32" : ""}`}>
       <Header
@@ -638,11 +597,11 @@ export default function ExceptionView({ backTo = "/home" }) {
                 className={`mt-5 pt-5 border-t border-border ${!log.pdf_path && !log.signed_path ? "opacity-60" : ""}`}
               >
                 <h2 className="font-bold mb-1">המסמך החתום מהלקוח</h2>
-                <p className="text-xs text-primary mb-3">
-                  {log.pdf_path || log.signed_path
-                    ? "העלאת המסמך החתום מסמנת את היומן כ״אושר ע״י הלקוח״ ונועלת אותו"
-                    : "יש להפיק קודם את דוח אישור העבודה הנוספת — רק אחרי הפקה ושליחה ללקוח ניתן להעלות מסמך חתום"}
-                </p>
+                {!log.signed_path && (
+                  <p className="text-xs text-primary mb-3">
+                    ממתין לחתימת הלקוח — לאחר החתימה היומן יסומן כ״אושר ע״י הלקוח״ ויינעל
+                  </p>
+                )}
                 {log.signed_path ? (
                   <div className="flex items-center gap-3 flex-wrap">
                     <button
@@ -664,33 +623,7 @@ export default function ExceptionView({ backTo = "/home" }) {
                       </button>
                     )}
                   </div>
-                ) : (
-                  <label
-                    className={`btn w-full sm:w-auto cursor-pointer ${
-                      log.status === "sent" ? "btn-accent" : "btn-outline"
-                    } ${
-                      locked || !log.pdf_path
-                        ? "opacity-50 pointer-events-none"
-                        : ""
-                    }`}
-                    title={!log.pdf_path ? "יש להפיק קודם את דוח אישור העבודה הנוספת" : ""}
-                  >
-                    {docUploading ? (
-                      <SpinnerIcon size={18} />
-                    ) : (
-                      <UploadIcon size={18} />
-                    )}
-                    העלאת המסמך החתום
-                    <input
-                      type="file"
-                      accept="application/pdf,image/*"
-                      className="hidden"
-                      onChange={uploadSignedDoc}
-                      disabled={docUploading || locked || !log.pdf_path}
-                    />
-                  </label>
-                )}
-                {docError && <p className="err">{docError}</p>}
+                ) : null}
               </div>
             </section>
           </div>

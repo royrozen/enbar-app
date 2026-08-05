@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import Header from '../components/Header'
+import { useEffect, useState } from "react";
+import Header from "../components/Header";
 import {
   UsersIcon,
   HardHatIcon,
@@ -11,135 +11,169 @@ import {
   XIcon,
   TrashIcon,
   ChevronDownIcon,
-} from '../components/Icons'
-import { supabase } from '../lib/supabase'
-import { useAuth } from '../lib/AuthContext'
+} from "../components/Icons";
+import { supabase } from "../lib/supabase";
+import { useAuth } from "../lib/AuthContext";
+import { normalizeEmployeePhone, formatEmployeePhone } from "../lib/lunch";
 
 const TABS = [
-  { key: 'clients', label: 'לקוחות', Icon: UsersIcon },
-  { key: 'leads', label: 'ראשי צוות', Icon: HardHatIcon },
-  { key: 'catalog', label: 'קטלוג חלקים', Icon: PackageIcon },
-]
+  { key: "clients", label: "לקוחות", Icon: UsersIcon },
+  { key: "leads", label: "ראשי צוות", Icon: HardHatIcon },
+  { key: "catalog", label: "קטלוג חלקים", Icon: PackageIcon },
+  { key: "lunch", label: "עובדים", Icon: HardHatIcon },
+];
 
 function ActiveToggle({ item, onToggle, busy }) {
   return (
     <button
-      className={`btn text-sm !min-h-[40px] ${item.is_active ? 'btn-ghost' : 'btn-outline !border-green-300 !text-green-700'}`}
+      type="button"
+      role="switch"
+      aria-checked={item.is_active}
+      aria-label={item.is_active ? "השבתת פריט" : "הפעלת פריט"}
+      className={`inline-flex h-5 w-8 shrink-0 items-center rounded-full border px-0.5 transition-colors duration-200 ${
+        item.is_active
+          ? "justify-end border-accent bg-accent"
+          : "justify-start border-border bg-muted"
+      } ${busy ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
       disabled={busy}
       onClick={onToggle}
-      title={item.is_active ? 'הפריט יוסתר מהרשימות אך ההיסטוריה תישמר' : 'החזרת הפריט לרשימות'}
+      title={
+        item.is_active
+          ? "הפריט יוסתר מהרשימות אך ההיסטוריה תישמר"
+          : "החזרת הפריט לרשימות"
+      }
     >
-      {item.is_active ? 'השבתה' : 'הפעלה'}
+      <span className="inline-block h-3 w-3 rounded-full bg-white shadow" />
     </button>
-  )
+  );
 }
 
 // Inline delete confirmation — no modal/window.confirm (app has no dialog primitive).
 // Renders a trash button; once clicked, swaps to "למחוק את {name}?" + confirm/cancel.
 function DeleteAction({ name, onConfirm, busy, disabled, disabledTitle }) {
-  const [confirming, setConfirming] = useState(false)
+  const [confirming, setConfirming] = useState(false);
 
   if (disabled) {
     return (
       <button
-        className="btn btn-ghost text-sm !min-h-[40px] opacity-40 cursor-not-allowed"
+        className="btn btn-ghost text-sm !min-h-[34px] opacity-40 cursor-not-allowed"
         disabled
         title={disabledTitle}
         aria-label="מחיקה"
       >
         <TrashIcon size={16} />
       </button>
-    )
+    );
   }
 
   if (!confirming) {
     return (
       <button
-        className="btn btn-ghost text-sm !min-h-[40px] hover:!text-destructive"
+        className="btn btn-ghost text-sm !min-h-[34px] hover:!text-destructive"
         onClick={() => setConfirming(true)}
         aria-label="מחיקה"
         title="מחיקה — הפריט יוסתר לצמיתות"
       >
         <TrashIcon size={16} />
       </button>
-    )
+    );
   }
 
   return (
     <span className="flex items-center gap-2 flex-wrap">
-      <span className="text-sm font-bold text-destructive">למחוק את {name}?</span>
+      <span className="text-sm font-bold text-destructive">
+        למחוק את {name}?
+      </span>
       <button
-        className="btn btn-destructive text-sm !min-h-[40px]"
+        className="btn btn-destructive text-sm !min-h-[34px]"
         disabled={busy}
         onClick={async () => {
-          await onConfirm()
-          setConfirming(false)
+          await onConfirm();
+          setConfirming(false);
         }}
       >
-        {busy ? <SpinnerIcon size={16} /> : 'מחיקה'}
+        {busy ? <SpinnerIcon size={16} /> : "מחיקה"}
       </button>
       <button
-        className="btn btn-ghost text-sm !min-h-[40px]"
+        className="btn btn-ghost text-sm !min-h-[34px]"
         disabled={busy}
         onClick={() => setConfirming(false)}
       >
         ביטול
       </button>
     </span>
-  )
+  );
 }
 
-function useAdminList(table, select = '*') {
-  const [items, setItems] = useState(null)
-  const [error, setError] = useState('')
+function useAdminList(table, select = "*") {
+  const [items, setItems] = useState(null);
+  const [error, setError] = useState("");
 
   async function load() {
     const { data, error: err } = await supabase
       .from(table)
       .select(select)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-    if (err) setError('הטעינה נכשלה — נסו לרענן')
-    else setItems(data || [])
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false });
+    if (err) setError("הטעינה נכשלה — נסו לרענן");
+    else setItems(data || []);
   }
 
   useEffect(() => {
-    load()
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [table])
+  }, [table]);
 
   async function toggleActive(item) {
     const { error: err } = await supabase
       .from(table)
       .update({ is_active: !item.is_active })
-      .eq('id', item.id)
+      .eq("id", item.id);
     if (err) {
-      setError('העדכון נכשל — נסו שוב')
-      return
+      setError("העדכון נכשל — נסו שוב");
+      return;
     }
-    setItems((list) => list.map((x) => (x.id === item.id ? { ...x, is_active: !x.is_active } : x)))
+    setItems((list) =>
+      list.map((x) =>
+        x.id === item.id ? { ...x, is_active: !x.is_active } : x,
+      ),
+    );
   }
 
   async function softDelete(item) {
     const { error: err } = await supabase
       .from(table)
       .update({ deleted_at: new Date().toISOString() })
-      .eq('id', item.id)
+      .eq("id", item.id);
     if (err) {
-      setError('המחיקה נכשלה — נסו שוב')
-      return false
+      setError("המחיקה נכשלה — נסו שוב");
+      return false;
     }
-    setItems((list) => list.filter((x) => x.id !== item.id))
-    return true
+    setItems((list) => list.filter((x) => x.id !== item.id));
+    return true;
   }
 
-  return { items, error, setError, load, toggleActive, softDelete }
+  return { items, error, setError, load, toggleActive, softDelete };
 }
 
-const emptyProjectForm = { name: '', city: '', contact_person: '', phone: '', email: '' }
+const emptyProjectForm = {
+  name: "",
+  city: "",
+  contact_person: "",
+  phone: "",
+  email: "",
+};
 
 // Shared field set for adding/editing a project under a client (client implicit).
-function ProjectForm({ form, setForm, error, busy, onSubmit, onCancel, submitLabel }) {
+function ProjectForm({
+  form,
+  setForm,
+  error,
+  busy,
+  onSubmit,
+  onCancel,
+  submitLabel,
+}) {
   return (
     <form
       onSubmit={onSubmit}
@@ -147,29 +181,50 @@ function ProjectForm({ form, setForm, error, busy, onSubmit, onCancel, submitLab
     >
       <div>
         <label className="label !text-xs">שם הפרויקט *</label>
-        <input className="input" value={form.name}
+        <input
+          className="input"
+          value={form.name}
           onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          placeholder="למשל: מגדל הזהב — קומות 1-5" />
+          placeholder="למשל: מגדל הזהב — קומות 1-5"
+        />
       </div>
       <div>
         <label className="label !text-xs">כתובת / עיר</label>
-        <input className="input" value={form.city}
-          onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} />
+        <input
+          className="input"
+          value={form.city}
+          onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+        />
       </div>
       <div>
         <label className="label !text-xs">איש קשר</label>
-        <input className="input" value={form.contact_person}
-          onChange={(e) => setForm((f) => ({ ...f, contact_person: e.target.value }))} />
+        <input
+          className="input"
+          value={form.contact_person}
+          onChange={(e) =>
+            setForm((f) => ({ ...f, contact_person: e.target.value }))
+          }
+        />
       </div>
       <div>
         <label className="label !text-xs">טלפון</label>
-        <input className="input" type="tel" dir="ltr" value={form.phone}
-          onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} />
+        <input
+          className="input"
+          type="tel"
+          dir="ltr"
+          value={form.phone}
+          onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+        />
       </div>
       <div className="sm:col-span-2">
         <label className="label !text-xs">דוא&quot;ל</label>
-        <input className="input" type="email" dir="ltr" value={form.email}
-          onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
+        <input
+          className="input"
+          type="email"
+          dir="ltr"
+          value={form.email}
+          onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+        />
       </div>
       {error && <p className="err sm:col-span-2">{error}</p>}
       <div className="sm:col-span-2 flex gap-2">
@@ -177,144 +232,156 @@ function ProjectForm({ form, setForm, error, busy, onSubmit, onCancel, submitLab
           {busy ? <SpinnerIcon size={18} /> : <CheckIcon size={18} />}
           {submitLabel}
         </button>
-        <button type="button" className="btn btn-ghost" disabled={busy} onClick={onCancel}>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          disabled={busy}
+          onClick={onCancel}
+        >
           ביטול
         </button>
       </div>
     </form>
-  )
+  );
 }
 
 function ClientsTab() {
-  const { items, error, setError, load, toggleActive, softDelete } = useAdminList(
-    'clients',
-    '*, projects(id, name, city, contact_person, phone, email, is_active, deleted_at)',
-  )
-  const [showAdd, setShowAdd] = useState(false)
-  const [addForm, setAddForm] = useState({ name: '', registration_number: '' })
-  const [addError, setAddError] = useState('')
-  const [addBusy, setAddBusy] = useState(false)
+  const { items, error, setError, load, toggleActive, softDelete } =
+    useAdminList(
+      "clients",
+      "*, projects(id, name, city, contact_person, phone, email, is_active, deleted_at)",
+    );
+  const [showAdd, setShowAdd] = useState(false);
+  const [addForm, setAddForm] = useState({ name: "", registration_number: "" });
+  const [addError, setAddError] = useState("");
+  const [addBusy, setAddBusy] = useState(false);
 
-  const [expandedId, setExpandedId] = useState(null)
+  const [expandedId, setExpandedId] = useState(null);
 
-  const [editingClientId, setEditingClientId] = useState(null)
-  const [clientEditForm, setClientEditForm] = useState({ name: '', registration_number: '' })
-  const [clientEditError, setClientEditError] = useState('')
-  const [clientEditBusy, setClientEditBusy] = useState(false)
+  const [editingClientId, setEditingClientId] = useState(null);
+  const [clientEditForm, setClientEditForm] = useState({
+    name: "",
+    registration_number: "",
+  });
+  const [clientEditError, setClientEditError] = useState("");
+  const [clientEditBusy, setClientEditBusy] = useState(false);
 
-  const [addingProjectFor, setAddingProjectFor] = useState(null)
-  const [projectAddForm, setProjectAddForm] = useState(emptyProjectForm)
-  const [projectAddError, setProjectAddError] = useState('')
-  const [projectAddBusy, setProjectAddBusy] = useState(false)
+  const [addingProjectFor, setAddingProjectFor] = useState(null);
+  const [projectAddForm, setProjectAddForm] = useState(emptyProjectForm);
+  const [projectAddError, setProjectAddError] = useState("");
+  const [projectAddBusy, setProjectAddBusy] = useState(false);
 
-  const [editingProjectId, setEditingProjectId] = useState(null)
-  const [projectEditForm, setProjectEditForm] = useState(emptyProjectForm)
-  const [projectEditError, setProjectEditError] = useState('')
-  const [projectEditBusy, setProjectEditBusy] = useState(false)
+  const [editingProjectId, setEditingProjectId] = useState(null);
+  const [projectEditForm, setProjectEditForm] = useState(emptyProjectForm);
+  const [projectEditError, setProjectEditError] = useState("");
+  const [projectEditBusy, setProjectEditBusy] = useState(false);
 
-  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   function liveProjects(client) {
-    return (client.projects || []).filter((p) => !p.deleted_at)
+    return (client.projects || []).filter((p) => !p.deleted_at);
   }
 
   async function addClient(e) {
-    e.preventDefault()
+    e.preventDefault();
     if (!addForm.name.trim()) {
-      setAddError('יש להזין שם לקוח')
-      return
+      setAddError("יש להזין שם לקוח");
+      return;
     }
-    setAddError('')
-    setAddBusy(true)
-    const { error: err } = await supabase.from('clients').insert({
+    setAddError("");
+    setAddBusy(true);
+    const { error: err } = await supabase.from("clients").insert({
       name: addForm.name.trim(),
       registration_number: addForm.registration_number.trim() || null,
-    })
-    setAddBusy(false)
+    });
+    setAddBusy(false);
     if (err) {
-      setAddError('הוספת הלקוח נכשלה — נסו שוב')
-      return
+      setAddError("הוספת הלקוח נכשלה — נסו שוב");
+      return;
     }
-    setAddForm({ name: '', registration_number: '' })
-    setShowAdd(false)
-    load()
+    setAddForm({ name: "", registration_number: "" });
+    setShowAdd(false);
+    load();
   }
 
   function startClientEdit(client) {
-    setEditingClientId(client.id)
-    setClientEditForm({ name: client.name, registration_number: client.registration_number || '' })
-    setClientEditError('')
+    setEditingClientId(client.id);
+    setClientEditForm({
+      name: client.name,
+      registration_number: client.registration_number || "",
+    });
+    setClientEditError("");
   }
 
   async function saveClientEdit(client) {
     if (!clientEditForm.name.trim()) {
-      setClientEditError('יש להזין שם לקוח')
-      return
+      setClientEditError("יש להזין שם לקוח");
+      return;
     }
-    setClientEditBusy(true)
+    setClientEditBusy(true);
     const { error: err } = await supabase
-      .from('clients')
+      .from("clients")
       .update({
         name: clientEditForm.name.trim(),
         registration_number: clientEditForm.registration_number.trim() || null,
       })
-      .eq('id', client.id)
-    setClientEditBusy(false)
+      .eq("id", client.id);
+    setClientEditBusy(false);
     if (err) {
-      setClientEditError('השמירה נכשלה — נסו שוב')
-      return
+      setClientEditError("השמירה נכשלה — נסו שוב");
+      return;
     }
-    setEditingClientId(null)
-    load()
+    setEditingClientId(null);
+    load();
   }
 
   async function addProject(e, clientId) {
-    e.preventDefault()
+    e.preventDefault();
     if (!projectAddForm.name.trim()) {
-      setProjectAddError('יש להזין שם פרויקט')
-      return
+      setProjectAddError("יש להזין שם פרויקט");
+      return;
     }
-    setProjectAddError('')
-    setProjectAddBusy(true)
-    const { error: err } = await supabase.from('projects').insert({
+    setProjectAddError("");
+    setProjectAddBusy(true);
+    const { error: err } = await supabase.from("projects").insert({
       client_id: clientId,
       name: projectAddForm.name.trim(),
       city: projectAddForm.city.trim() || null,
       contact_person: projectAddForm.contact_person.trim() || null,
       phone: projectAddForm.phone.trim() || null,
       email: projectAddForm.email.trim() || null,
-    })
-    setProjectAddBusy(false)
+    });
+    setProjectAddBusy(false);
     if (err) {
-      setProjectAddError('הוספת הפרויקט נכשלה — נסו שוב')
-      return
+      setProjectAddError("הוספת הפרויקט נכשלה — נסו שוב");
+      return;
     }
-    setProjectAddForm(emptyProjectForm)
-    setAddingProjectFor(null)
-    load()
+    setProjectAddForm(emptyProjectForm);
+    setAddingProjectFor(null);
+    load();
   }
 
   function startProjectEdit(project) {
-    setEditingProjectId(project.id)
+    setEditingProjectId(project.id);
     setProjectEditForm({
       name: project.name,
-      city: project.city || '',
-      contact_person: project.contact_person || '',
-      phone: project.phone || '',
-      email: project.email || '',
-    })
-    setProjectEditError('')
+      city: project.city || "",
+      contact_person: project.contact_person || "",
+      phone: project.phone || "",
+      email: project.email || "",
+    });
+    setProjectEditError("");
   }
 
   async function saveProjectEdit(e, project) {
-    e.preventDefault()
+    e.preventDefault();
     if (!projectEditForm.name.trim()) {
-      setProjectEditError('יש להזין שם פרויקט')
-      return
+      setProjectEditError("יש להזין שם פרויקט");
+      return;
     }
-    setProjectEditBusy(true)
+    setProjectEditBusy(true);
     const { error: err } = await supabase
-      .from('projects')
+      .from("projects")
       .update({
         name: projectEditForm.name.trim(),
         city: projectEditForm.city.trim() || null,
@@ -322,46 +389,46 @@ function ClientsTab() {
         phone: projectEditForm.phone.trim() || null,
         email: projectEditForm.email.trim() || null,
       })
-      .eq('id', project.id)
-    setProjectEditBusy(false)
+      .eq("id", project.id);
+    setProjectEditBusy(false);
     if (err) {
-      setProjectEditError('השמירה נכשלה — נסו שוב')
-      return
+      setProjectEditError("השמירה נכשלה — נסו שוב");
+      return;
     }
-    setEditingProjectId(null)
-    load()
+    setEditingProjectId(null);
+    load();
   }
 
   async function toggleProjectActive(project) {
     const { error: err } = await supabase
-      .from('projects')
+      .from("projects")
       .update({ is_active: !project.is_active })
-      .eq('id', project.id)
+      .eq("id", project.id);
     if (err) {
-      setError('העדכון נכשל — נסו שוב')
-      return
+      setError("העדכון נכשל — נסו שוב");
+      return;
     }
-    load()
+    load();
   }
 
   async function deleteProject(project) {
-    setDeleteBusy(true)
+    setDeleteBusy(true);
     const { error: err } = await supabase
-      .from('projects')
+      .from("projects")
       .update({ deleted_at: new Date().toISOString() })
-      .eq('id', project.id)
-    setDeleteBusy(false)
+      .eq("id", project.id);
+    setDeleteBusy(false);
     if (err) {
-      setError('המחיקה נכשלה — נסו שוב')
-      return
+      setError("המחיקה נכשלה — נסו שוב");
+      return;
     }
-    load()
+    load();
   }
 
   async function deleteClient(client) {
-    setDeleteBusy(true)
-    await softDelete(client)
-    setDeleteBusy(false)
+    setDeleteBusy(true);
+    await softDelete(client);
+    setDeleteBusy(false);
   }
 
   return (
@@ -374,18 +441,42 @@ function ClientsTab() {
           </button>
         </div>
       ) : (
-        <form onSubmit={addClient} className="card p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <form
+          onSubmit={addClient}
+          className="card p-4 grid grid-cols-1 sm:grid-cols-2 gap-3"
+        >
           <h3 className="font-bold sm:col-span-2">הוספת לקוח חדש</h3>
           <div>
-            <label className="label !text-xs" htmlFor="c-name">שם הלקוח *</label>
-            <input id="c-name" className="input" value={addForm.name}
-              onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="למשל: י.ד. בנייה בעמ" autoFocus />
+            <label className="label !text-xs" htmlFor="c-name">
+              שם הלקוח *
+            </label>
+            <input
+              id="c-name"
+              className="input"
+              value={addForm.name}
+              onChange={(e) =>
+                setAddForm((f) => ({ ...f, name: e.target.value }))
+              }
+              placeholder="למשל: י.ד. בנייה בעמ"
+              autoFocus
+            />
           </div>
           <div>
-            <label className="label !text-xs" htmlFor="c-reg">ח.פ</label>
-            <input id="c-reg" className="input" dir="ltr" value={addForm.registration_number}
-              onChange={(e) => setAddForm((f) => ({ ...f, registration_number: e.target.value }))} />
+            <label className="label !text-xs" htmlFor="c-reg">
+              ח.פ
+            </label>
+            <input
+              id="c-reg"
+              className="input"
+              dir="ltr"
+              value={addForm.registration_number}
+              onChange={(e) =>
+                setAddForm((f) => ({
+                  ...f,
+                  registration_number: e.target.value,
+                }))
+              }
+            />
           </div>
           {addError && <p className="err sm:col-span-2">{addError}</p>}
           <div className="sm:col-span-2 flex gap-2">
@@ -393,8 +484,12 @@ function ClientsTab() {
               {addBusy ? <SpinnerIcon size={18} /> : <PlusIcon size={18} />}
               הוספת לקוח
             </button>
-            <button type="button" className="btn btn-ghost" disabled={addBusy}
-              onClick={() => setShowAdd(false)}>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={addBusy}
+              onClick={() => setShowAdd(false)}
+            >
               ביטול
             </button>
           </div>
@@ -405,21 +500,21 @@ function ClientsTab() {
 
       <ul className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
         {(items || []).map((c) => {
-          const projects = liveProjects(c)
-          const expanded = expandedId === c.id
+          const projects = liveProjects(c);
+          const expanded = expandedId === c.id;
           return (
-            <li key={c.id} className={expanded ? 'lg:col-span-2' : ''}>
-              <div className={`card ${c.is_active ? '' : 'opacity-55'}`}>
+            <li key={c.id} className={expanded ? "lg:col-span-2" : ""}>
+              <div className={`card ${c.is_active ? "" : "opacity-55"}`}>
                 <div className="p-4 flex items-center gap-3 flex-wrap">
                   <button
                     onClick={() => setExpandedId(expanded ? null : c.id)}
                     className="flex items-center justify-center w-6 h-6 shrink-0 text-primary hover:text-foreground transition-colors"
-                    title={expanded ? 'סגירה' : 'הצגת פרויקטים'}
+                    title={expanded ? "סגירה" : "הצגת פרויקטים"}
                     aria-expanded={expanded}
                   >
                     <ChevronDownIcon
                       size={18}
-                      className={`transition-transform ${expanded ? 'rotate-180' : ''}`}
+                      className={`transition-transform ${expanded ? "rotate-180" : ""}`}
                     />
                   </button>
 
@@ -427,24 +522,55 @@ function ClientsTab() {
                     <div className="flex-1 min-w-[240px] grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <div>
                         <label className="label !text-xs">שם הלקוח *</label>
-                        <input className="input !min-h-[44px]" value={clientEditForm.name}
-                          onChange={(e) => setClientEditForm((f) => ({ ...f, name: e.target.value }))}
-                          autoFocus />
+                        <input
+                          className="input !min-h-[30px]"
+                          value={clientEditForm.name}
+                          onChange={(e) =>
+                            setClientEditForm((f) => ({
+                              ...f,
+                              name: e.target.value,
+                            }))
+                          }
+                          autoFocus
+                        />
                       </div>
                       <div>
                         <label className="label !text-xs">ח.פ</label>
-                        <input className="input !min-h-[44px]" dir="ltr" value={clientEditForm.registration_number}
-                          onChange={(e) => setClientEditForm((f) => ({ ...f, registration_number: e.target.value }))} />
+                        <input
+                          className="input !min-h-[30px]"
+                          dir="ltr"
+                          value={clientEditForm.registration_number}
+                          onChange={(e) =>
+                            setClientEditForm((f) => ({
+                              ...f,
+                              registration_number: e.target.value,
+                            }))
+                          }
+                        />
                       </div>
-                      {clientEditError && <p className="err sm:col-span-2">{clientEditError}</p>}
+                      {clientEditError && (
+                        <p className="err sm:col-span-2">{clientEditError}</p>
+                      )}
                       <div className="sm:col-span-2 flex gap-2">
-                        <button className="btn btn-outline text-sm !min-h-[40px]" disabled={clientEditBusy}
-                          onClick={() => saveClientEdit(c)} aria-label="שמירה">
-                          {clientEditBusy ? <SpinnerIcon size={16} /> : <CheckIcon size={16} />}
+                        <button
+                          className="btn btn-outline text-sm !min-h-[34px]"
+                          disabled={clientEditBusy}
+                          onClick={() => saveClientEdit(c)}
+                          aria-label="שמירה"
+                        >
+                          {clientEditBusy ? (
+                            <SpinnerIcon size={16} />
+                          ) : (
+                            <CheckIcon size={16} />
+                          )}
                           שמירה
                         </button>
-                        <button className="btn btn-ghost text-sm !min-h-[40px]" disabled={clientEditBusy}
-                          onClick={() => setEditingClientId(null)} aria-label="ביטול">
+                        <button
+                          className="btn btn-ghost text-sm !min-h-[34px]"
+                          disabled={clientEditBusy}
+                          onClick={() => setEditingClientId(null)}
+                          aria-label="ביטול"
+                        >
                           <XIcon size={16} />
                           ביטול
                         </button>
@@ -455,21 +581,35 @@ function ClientsTab() {
                       <div className="flex-1 min-w-0">
                         <p className="font-bold truncate">
                           {c.name}
-                          {!c.is_active && <span className="text-xs text-primary font-normal ms-2">(מושבת)</span>}
+                          {!c.is_active && (
+                            <span className="text-xs text-primary font-normal ms-2">
+                              (מושבת)
+                            </span>
+                          )}
                         </p>
                         <p className="text-sm text-primary truncate">
                           {[
-                            c.registration_number ? `ח.פ ${c.registration_number}` : null,
+                            c.registration_number
+                              ? `ח.פ ${c.registration_number}`
+                              : null,
                             `${projects.length} פרויקטים`,
-                          ].filter(Boolean).join(' · ')}
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
                         </p>
                       </div>
                       <div className="flex items-center gap-1 flex-wrap">
-                        <button className="btn btn-ghost text-sm !min-h-[40px]"
-                          onClick={() => startClientEdit(c)} aria-label="עריכת לקוח">
+                        <button
+                          className="btn btn-ghost text-sm !min-h-[34px]"
+                          onClick={() => startClientEdit(c)}
+                          aria-label="עריכת לקוח"
+                        >
                           <PencilIcon size={16} />
                         </button>
-                        <ActiveToggle item={c} onToggle={() => toggleActive(c)} />
+                        <ActiveToggle
+                          item={c}
+                          onToggle={() => toggleActive(c)}
+                        />
                         <DeleteAction
                           name={c.name}
                           onConfirm={() => deleteClient(c)}
@@ -485,7 +625,9 @@ function ClientsTab() {
                 {expanded && (
                   <div className="border-t border-border bg-muted rounded-b-2xl p-4 flex flex-col gap-2">
                     {projects.length === 0 && (
-                      <p className="text-center text-sm text-primary py-2">אין פרויקטים ללקוח זה</p>
+                      <p className="text-center text-sm text-primary py-2">
+                        אין פרויקטים ללקוח זה
+                      </p>
                     )}
 
                     {projects.map((p) =>
@@ -503,23 +645,35 @@ function ClientsTab() {
                       ) : (
                         <div
                           key={p.id}
-                          className={`rounded-xl border-2 border-border bg-white p-3 flex items-center gap-3 flex-wrap ${p.is_active ? '' : 'opacity-55'}`}
+                          className={`rounded-xl border-2 border-border bg-white p-3 flex items-center gap-3 flex-wrap ${p.is_active ? "" : "opacity-55"}`}
                         >
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold text-sm truncate">
                               {p.name}
-                              {!p.is_active && <span className="text-xs text-primary font-normal ms-2">(מושבת)</span>}
+                              {!p.is_active && (
+                                <span className="text-xs text-primary font-normal ms-2">
+                                  (מושבת)
+                                </span>
+                              )}
                             </p>
                             <p className="text-xs text-primary truncate">
-                              {[p.city, p.contact_person, p.phone].filter(Boolean).join(' · ') || '—'}
+                              {[p.city, p.contact_person, p.phone]
+                                .filter(Boolean)
+                                .join(" · ") || "—"}
                             </p>
                           </div>
                           <div className="flex items-center gap-1 flex-wrap">
-                            <button className="btn btn-ghost text-sm !min-h-[40px]"
-                              onClick={() => startProjectEdit(p)} aria-label="עריכת פרויקט">
+                            <button
+                              className="btn btn-ghost text-sm !min-h-[34px]"
+                              onClick={() => startProjectEdit(p)}
+                              aria-label="עריכת פרויקט"
+                            >
                               <PencilIcon size={16} />
                             </button>
-                            <ActiveToggle item={p} onToggle={() => toggleProjectActive(p)} />
+                            <ActiveToggle
+                              item={p}
+                              onToggle={() => toggleProjectActive(p)}
+                            />
                             <DeleteAction
                               name={p.name}
                               onConfirm={() => deleteProject(p)}
@@ -545,9 +699,9 @@ function ClientsTab() {
                         <button
                           className="btn btn-outline text-sm"
                           onClick={() => {
-                            setProjectAddForm(emptyProjectForm)
-                            setProjectAddError('')
-                            setAddingProjectFor(c.id)
+                            setProjectAddForm(emptyProjectForm);
+                            setProjectAddError("");
+                            setAddingProjectFor(c.id);
                           }}
                         >
                           <PlusIcon size={16} />
@@ -559,119 +713,123 @@ function ClientsTab() {
                 )}
               </div>
             </li>
-          )
+          );
         })}
         {items?.length === 0 && (
-          <li className="card p-6 text-center text-primary lg:col-span-2">אין לקוחות עדיין</li>
+          <li className="card p-6 text-center text-primary lg:col-span-2">
+            אין לקוחות עדיין
+          </li>
         )}
         {items === null && (
-          <li className="flex justify-center py-8 text-primary lg:col-span-2"><SpinnerIcon size={28} /></li>
+          <li className="flex justify-center py-8 text-primary lg:col-span-2">
+            <SpinnerIcon size={28} />
+          </li>
         )}
       </ul>
     </div>
-  )
+  );
 }
 
 function LeadsTab() {
-  const { items, error, setError, load, toggleActive, softDelete } = useAdminList(
-    'team_leads',
-    '*, profiles(id, phone, role)',
-  )
-  const { session } = useAuth()
-  const [showAdd, setShowAdd] = useState(false)
-  const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
-  const [formError, setFormError] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [deleteBusy, setDeleteBusy] = useState(false)
+  const { items, error, setError, load, toggleActive, softDelete } =
+    useAdminList("team_leads", "*, profiles(id, phone, role)");
+  const { session } = useAuth();
+  const [showAdd, setShowAdd] = useState(false);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [formError, setFormError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
-  const [editingLeadId, setEditingLeadId] = useState(null)
-  const [leadEditForm, setLeadEditForm] = useState({ name: '', phone: '' })
-  const [leadEditError, setLeadEditError] = useState('')
-  const [leadEditBusy, setLeadEditBusy] = useState(false)
+  const [editingLeadId, setEditingLeadId] = useState(null);
+  const [leadEditForm, setLeadEditForm] = useState({ name: "", phone: "" });
+  const [leadEditError, setLeadEditError] = useState("");
+  const [leadEditBusy, setLeadEditBusy] = useState(false);
 
   function startLeadEdit(lead, linkedProfile) {
-    setEditingLeadId(lead.id)
-    setLeadEditForm({ name: lead.name, phone: linkedProfile?.phone || '' })
-    setLeadEditError('')
+    setEditingLeadId(lead.id);
+    setLeadEditForm({ name: lead.name, phone: linkedProfile?.phone || "" });
+    setLeadEditError("");
   }
 
   async function saveLeadEdit(lead, linkedProfile) {
     if (!leadEditForm.name.trim()) {
-      setLeadEditError('יש להזין שם ראש צוות')
-      return
+      setLeadEditError("יש להזין שם ראש צוות");
+      return;
     }
-    setLeadEditBusy(true)
-    let res
+    setLeadEditBusy(true);
+    let res;
     try {
-      res = await fetch('/api/admin/update-team-lead', {
-        method: 'POST',
+      res = await fetch("/api/admin/update-team-lead", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${session?.access_token}`,
         },
         body: JSON.stringify({
           teamLeadId: lead.id,
           name: leadEditForm.name.trim(),
-          phone: linkedProfile ? leadEditForm.phone.trim() : '',
+          phone: linkedProfile ? leadEditForm.phone.trim() : "",
         }),
-      })
+      });
     } catch {
-      res = null
+      res = null;
     }
-    setLeadEditBusy(false)
+    setLeadEditBusy(false);
     if (!res?.ok) {
-      const body = await res?.json().catch(() => null)
+      const body = await res?.json().catch(() => null);
       setLeadEditError(
-        body?.error === 'invalid phone' ? 'מספר טלפון לא תקין — יש להזין מספר נייד ישראלי' : 'השמירה נכשלה — נסו שוב',
-      )
-      return
+        body?.error === "invalid phone"
+          ? "מספר טלפון לא תקין — יש להזין מספר נייד ישראלי"
+          : "השמירה נכשלה — נסו שוב",
+      );
+      return;
     }
-    setEditingLeadId(null)
-    load()
+    setEditingLeadId(null);
+    load();
   }
 
-  const activeCount = (items || []).filter((l) => l.is_active).length
+  const activeCount = (items || []).filter((l) => l.is_active).length;
 
   async function add(e) {
-    e.preventDefault()
+    e.preventDefault();
     if (!name.trim()) {
-      setFormError('יש להזין שם ראש צוות')
-      return
+      setFormError("יש להזין שם ראש צוות");
+      return;
     }
     if (!phone.trim()) {
-      setFormError('יש להזין מספר טלפון')
-      return
+      setFormError("יש להזין מספר טלפון");
+      return;
     }
-    setFormError('')
-    setBusy(true)
-    let res
+    setFormError("");
+    setBusy(true);
+    let res;
     try {
-      res = await fetch('/api/admin/create-team-lead', {
-        method: 'POST',
+      res = await fetch("/api/admin/create-team-lead", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${session?.access_token}`,
         },
         body: JSON.stringify({ name: name.trim(), phone: phone.trim() }),
-      })
+      });
     } catch {
-      res = null
+      res = null;
     }
-    setBusy(false)
+    setBusy(false);
     if (!res?.ok) {
-      const body = await res?.json().catch(() => null)
+      const body = await res?.json().catch(() => null);
       setFormError(
-        body?.error === 'invalid phone'
-          ? 'מספר טלפון לא תקין — יש להזין מספר נייד ישראלי'
-          : 'הוספת ראש הצוות נכשלה — נסו שוב',
-      )
-      return
+        body?.error === "invalid phone"
+          ? "מספר טלפון לא תקין — יש להזין מספר נייד ישראלי"
+          : "הוספת ראש הצוות נכשלה — נסו שוב",
+      );
+      return;
     }
-    setName('')
-    setPhone('')
-    setShowAdd(false)
-    load()
+    setName("");
+    setPhone("");
+    setShowAdd(false);
+    load();
   }
 
   return (
@@ -688,18 +846,35 @@ function LeadsTab() {
           <h3 className="font-bold mb-3">הוספת ראש צוות</h3>
           <div className="flex gap-2 items-start flex-wrap">
             <div className="flex-1 min-w-[220px]">
-              <input className="input" value={name} onChange={(e) => setName(e.target.value)}
-                placeholder="שם ראש הצוות" aria-label="שם ראש הצוות" autoFocus />
+              <input
+                className="input"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="שם ראש הצוות"
+                aria-label="שם ראש הצוות"
+                autoFocus
+              />
             </div>
             <div className="flex-1 min-w-[220px]">
-              <input className="input" dir="ltr" value={phone} onChange={(e) => setPhone(e.target.value)}
-                placeholder="050-1234567" aria-label="מספר טלפון" />
+              <input
+                className="input"
+                dir="ltr"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="050-1234567"
+                aria-label="מספר טלפון"
+              />
             </div>
             <button className="btn btn-accent" disabled={busy}>
               {busy ? <SpinnerIcon size={18} /> : <PlusIcon size={18} />}
               הוספה
             </button>
-            <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setShowAdd(false)}>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={busy}
+              onClick={() => setShowAdd(false)}
+            >
               ביטול
             </button>
           </div>
@@ -710,33 +885,67 @@ function LeadsTab() {
       {error && <p className="err">{error}</p>}
       <ul className="flex flex-col gap-2">
         {(items || []).map((l) => {
-          const lastActive = l.is_active && activeCount === 1
-          const linkedProfile = Array.isArray(l.profiles) ? l.profiles[0] : l.profiles
+          const lastActive = l.is_active && activeCount === 1;
+          const linkedProfile = Array.isArray(l.profiles)
+            ? l.profiles[0]
+            : l.profiles;
           return (
-            <li key={l.id} className={`card p-4 flex items-center gap-3 flex-wrap ${l.is_active ? '' : 'opacity-55'}`}>
+            <li
+              key={l.id}
+              className={`card p-4 flex items-center gap-3 flex-wrap ${l.is_active ? "" : "opacity-55"}`}
+            >
               {editingLeadId === l.id ? (
                 <div className="flex-1 min-w-[240px] grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <label className="label !text-xs">שם ראש הצוות *</label>
-                    <input className="input !min-h-[44px]" value={leadEditForm.name}
-                      onChange={(e) => setLeadEditForm((f) => ({ ...f, name: e.target.value }))}
-                      autoFocus />
+                    <input
+                      className="input !min-h-[30px]"
+                      value={leadEditForm.name}
+                      onChange={(e) =>
+                        setLeadEditForm((f) => ({ ...f, name: e.target.value }))
+                      }
+                      autoFocus
+                    />
                   </div>
                   <div>
                     <label className="label !text-xs">טלפון</label>
-                    <input className="input !min-h-[44px]" dir="ltr" value={leadEditForm.phone}
-                      onChange={(e) => setLeadEditForm((f) => ({ ...f, phone: e.target.value }))}
-                      disabled={!linkedProfile} placeholder={linkedProfile ? '' : 'אין משתמש מקושר'} />
+                    <input
+                      className="input !min-h-[30px]"
+                      dir="ltr"
+                      value={leadEditForm.phone}
+                      onChange={(e) =>
+                        setLeadEditForm((f) => ({
+                          ...f,
+                          phone: e.target.value,
+                        }))
+                      }
+                      disabled={!linkedProfile}
+                      placeholder={linkedProfile ? "" : "אין משתמש מקושר"}
+                    />
                   </div>
-                  {leadEditError && <p className="err sm:col-span-2">{leadEditError}</p>}
+                  {leadEditError && (
+                    <p className="err sm:col-span-2">{leadEditError}</p>
+                  )}
                   <div className="sm:col-span-2 flex gap-2">
-                    <button className="btn btn-outline text-sm !min-h-[40px]" disabled={leadEditBusy}
-                      onClick={() => saveLeadEdit(l, linkedProfile)} aria-label="שמירה">
-                      {leadEditBusy ? <SpinnerIcon size={16} /> : <CheckIcon size={16} />}
+                    <button
+                      className="btn btn-outline text-sm !min-h-[34px]"
+                      disabled={leadEditBusy}
+                      onClick={() => saveLeadEdit(l, linkedProfile)}
+                      aria-label="שמירה"
+                    >
+                      {leadEditBusy ? (
+                        <SpinnerIcon size={16} />
+                      ) : (
+                        <CheckIcon size={16} />
+                      )}
                       שמירה
                     </button>
-                    <button className="btn btn-ghost text-sm !min-h-[40px]" disabled={leadEditBusy}
-                      onClick={() => setEditingLeadId(null)} aria-label="ביטול">
+                    <button
+                      className="btn btn-ghost text-sm !min-h-[34px]"
+                      disabled={leadEditBusy}
+                      onClick={() => setEditingLeadId(null)}
+                      aria-label="ביטול"
+                    >
                       <XIcon size={16} />
                       ביטול
                     </button>
@@ -747,23 +956,30 @@ function LeadsTab() {
                   <div className="flex-1 min-w-0">
                     <p className="font-bold truncate">
                       {l.name}
-                      {!l.is_active && <span className="text-xs text-primary font-normal ms-2">(מושבת)</span>}
+                      {!l.is_active && (
+                        <span className="text-xs text-primary font-normal ms-2">
+                          (מושבת)
+                        </span>
+                      )}
                     </p>
                     <p className="text-xs text-primary mt-0.5" dir="ltr">
-                      {linkedProfile ? linkedProfile.phone : 'אין משתמש מקושר'}
+                      {linkedProfile ? linkedProfile.phone : "אין משתמש מקושר"}
                     </p>
                   </div>
-                  <button className="btn btn-ghost text-sm !min-h-[40px]"
-                    onClick={() => startLeadEdit(l, linkedProfile)} aria-label="עריכת ראש צוות">
+                  <button
+                    className="btn btn-ghost text-sm !min-h-[34px]"
+                    onClick={() => startLeadEdit(l, linkedProfile)}
+                    aria-label="עריכת ראש צוות"
+                  >
                     <PencilIcon size={16} />
                   </button>
                   <ActiveToggle item={l} onToggle={() => toggleActive(l)} />
                   <DeleteAction
                     name={l.name}
                     onConfirm={async () => {
-                      setDeleteBusy(true)
-                      await softDelete(l)
-                      setDeleteBusy(false)
+                      setDeleteBusy(true);
+                      await softDelete(l);
+                      setDeleteBusy(false);
                     }}
                     busy={deleteBusy}
                     disabled={lastActive}
@@ -772,78 +988,87 @@ function LeadsTab() {
                 </>
               )}
             </li>
-          )
+          );
         })}
-        {items?.length === 0 && <li className="card p-6 text-center text-primary">אין ראשי צוות עדיין</li>}
+        {items?.length === 0 && (
+          <li className="card p-6 text-center text-primary">
+            אין ראשי צוות עדיין
+          </li>
+        )}
         {items === null && (
-          <li className="flex justify-center py-8 text-primary"><SpinnerIcon size={28} /></li>
+          <li className="flex justify-center py-8 text-primary">
+            <SpinnerIcon size={28} />
+          </li>
         )}
       </ul>
     </div>
-  )
+  );
 }
 
 function CatalogTab() {
-  const { items, error, setError, load, toggleActive, softDelete } = useAdminList('catalog_items')
-  const [showAdd, setShowAdd] = useState(false)
-  const [name, setName] = useState('')
-  const [formError, setFormError] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [deleteBusy, setDeleteBusy] = useState(false)
+  const { items, error, setError, load, toggleActive, softDelete } =
+    useAdminList("catalog_items");
+  const [showAdd, setShowAdd] = useState(false);
+  const [name, setName] = useState("");
+  const [formError, setFormError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
-  const [editingId, setEditingId] = useState(null)
-  const [editValue, setEditValue] = useState('')
-  const [editError, setEditError] = useState('')
-  const [editBusy, setEditBusy] = useState(false)
+  const [editingId, setEditingId] = useState(null);
+  const [editValue, setEditValue] = useState("");
+  const [editError, setEditError] = useState("");
+  const [editBusy, setEditBusy] = useState(false);
 
   async function add(e) {
-    e.preventDefault()
+    e.preventDefault();
     if (!name.trim()) {
-      setFormError('יש להזין שם חלק')
-      return
+      setFormError("יש להזין שם חלק");
+      return;
     }
-    setFormError('')
-    setBusy(true)
-    const { error: err } = await supabase.from('catalog_items').insert({ name: name.trim() })
-    setBusy(false)
+    setFormError("");
+    setBusy(true);
+    const { error: err } = await supabase
+      .from("catalog_items")
+      .insert({ name: name.trim() });
+    setBusy(false);
     if (err) {
-      setFormError('הוספת החלק נכשלה — נסו שוב')
-      return
+      setFormError("הוספת החלק נכשלה — נסו שוב");
+      return;
     }
-    setName('')
-    setShowAdd(false)
-    load()
+    setName("");
+    setShowAdd(false);
+    load();
   }
 
   function startEdit(item) {
-    setEditingId(item.id)
-    setEditValue(item.name)
-    setEditError('')
+    setEditingId(item.id);
+    setEditValue(item.name);
+    setEditError("");
   }
 
   function cancelEdit() {
-    setEditingId(null)
-    setEditValue('')
-    setEditError('')
+    setEditingId(null);
+    setEditValue("");
+    setEditError("");
   }
 
   async function saveEdit(item) {
     if (!editValue.trim()) {
-      setEditError('יש להזין שם חלק')
-      return
+      setEditError("יש להזין שם חלק");
+      return;
     }
-    setEditBusy(true)
+    setEditBusy(true);
     const { error: err } = await supabase
-      .from('catalog_items')
+      .from("catalog_items")
       .update({ name: editValue.trim() })
-      .eq('id', item.id)
-    setEditBusy(false)
+      .eq("id", item.id);
+    setEditBusy(false);
     if (err) {
-      setEditError('השמירה נכשלה — נסו שוב')
-      return
+      setEditError("השמירה נכשלה — נסו שוב");
+      return;
     }
-    setEditingId(null)
-    load()
+    setEditingId(null);
+    load();
   }
 
   return (
@@ -860,15 +1085,26 @@ function CatalogTab() {
           <h3 className="font-bold mb-3">הוספת חלק לקטלוג</h3>
           <div className="flex gap-2 items-start flex-wrap">
             <div className="flex-1 min-w-[220px]">
-              <input className="input" value={name} onChange={(e) => setName(e.target.value)}
-                placeholder="שם החלק" aria-label="שם החלק" autoFocus />
+              <input
+                className="input"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="שם החלק"
+                aria-label="שם החלק"
+                autoFocus
+              />
               {formError && <p className="err">{formError}</p>}
             </div>
             <button className="btn btn-accent" disabled={busy}>
               {busy ? <SpinnerIcon size={18} /> : <PlusIcon size={18} />}
               הוספה
             </button>
-            <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setShowAdd(false)}>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={busy}
+              onClick={() => setShowAdd(false)}
+            >
               ביטול
             </button>
           </div>
@@ -878,11 +1114,14 @@ function CatalogTab() {
       {error && <p className="err">{error}</p>}
       <ul className="flex flex-col gap-2">
         {(items || []).map((c) => (
-          <li key={c.id} className={`card p-4 flex items-center gap-3 flex-wrap ${c.is_active ? '' : 'opacity-55'}`}>
+          <li
+            key={c.id}
+            className={`card p-4 flex items-center gap-3 flex-wrap ${c.is_active ? "" : "opacity-55"}`}
+          >
             {editingId === c.id ? (
               <div className="flex-1 min-w-0">
                 <input
-                  className="input !min-h-[44px]"
+                  className="input !min-h-[30px]"
                   value={editValue}
                   onChange={(e) => setEditValue(e.target.value)}
                   autoFocus
@@ -892,22 +1131,30 @@ function CatalogTab() {
             ) : (
               <p className="flex-1 font-bold truncate">
                 {c.name}
-                {!c.is_active && <span className="text-xs text-primary font-normal ms-2">(מושבת)</span>}
+                {!c.is_active && (
+                  <span className="text-xs text-primary font-normal ms-2">
+                    (מושבת)
+                  </span>
+                )}
               </p>
             )}
 
             {editingId === c.id ? (
               <>
                 <button
-                  className="btn btn-outline text-sm !min-h-[40px]"
+                  className="btn btn-outline text-sm !min-h-[34px]"
                   disabled={editBusy}
                   onClick={() => saveEdit(c)}
                   aria-label="שמירה"
                 >
-                  {editBusy ? <SpinnerIcon size={16} /> : <CheckIcon size={16} />}
+                  {editBusy ? (
+                    <SpinnerIcon size={16} />
+                  ) : (
+                    <CheckIcon size={16} />
+                  )}
                 </button>
                 <button
-                  className="btn btn-ghost text-sm !min-h-[40px]"
+                  className="btn btn-ghost text-sm !min-h-[34px]"
                   disabled={editBusy}
                   onClick={cancelEdit}
                   aria-label="ביטול"
@@ -917,7 +1164,7 @@ function CatalogTab() {
               </>
             ) : (
               <button
-                className="btn btn-ghost text-sm !min-h-[40px]"
+                className="btn btn-ghost text-sm !min-h-[34px]"
                 onClick={() => startEdit(c)}
                 aria-label="עריכת שם"
               >
@@ -929,33 +1176,511 @@ function CatalogTab() {
             <DeleteAction
               name={c.name}
               onConfirm={async () => {
-                setDeleteBusy(true)
-                await softDelete(c)
-                setDeleteBusy(false)
+                setDeleteBusy(true);
+                await softDelete(c);
+                setDeleteBusy(false);
               }}
               busy={deleteBusy}
             />
           </li>
         ))}
-        {items?.length === 0 && <li className="card p-6 text-center text-primary">אין חלקים בקטלוג עדיין</li>}
+        {items?.length === 0 && (
+          <li className="card p-6 text-center text-primary">
+            אין חלקים בקטלוג עדיין
+          </li>
+        )}
         {items === null && (
-          <li className="flex justify-center py-8 text-primary"><SpinnerIcon size={28} /></li>
+          <li className="flex justify-center py-8 text-primary">
+            <SpinnerIcon size={28} />
+          </li>
         )}
       </ul>
     </div>
-  )
+  );
+}
+
+// Reusable <details> section with optional action button in the header.
+// Uses native open/toggle behavior while still allowing controlled state.
+function CollapsibleSection({
+  title,
+  count,
+  headerAction,
+  open,
+  onOpenChange,
+  children,
+}) {
+  return (
+    <details
+      className="group rounded-xl border-2 border-border bg-white"
+      open={open}
+      onToggle={(e) => onOpenChange?.(e.currentTarget.open)}
+    >
+      <summary className="flex items-center justify-between gap-2 p-4 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
+        <div className="flex items-center gap-2">
+          <span className="font-bold">
+            {title}
+            {typeof count === "number" ? ` (${count})` : ""}
+          </span>
+          {headerAction && (
+            <div
+              className="flex items-center"
+              onClick={(e) => e.preventDefault()}
+            >
+              {headerAction}
+            </div>
+          )}
+        </div>
+        <ChevronDownIcon
+          size={18}
+          className="transition-transform group-open:rotate-180"
+        />
+      </summary>
+      <div className="border-t border-border p-4">{children}</div>
+    </details>
+  );
+}
+
+function LunchEmployeesSection() {
+  const { items, error, setError, load, toggleActive } = useAdminList(
+    "employees",
+    "id, name, phone, is_active, created_at",
+  );
+  const [showAdd, setShowAdd] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [formError, setFormError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({ name: "", phone: "" });
+  const [editError, setEditError] = useState("");
+  const [editBusy, setEditBusy] = useState(false);
+
+  async function add(e) {
+    e.preventDefault();
+    if (!name.trim()) {
+      setFormError("יש להזין שם");
+      return;
+    }
+    const normalized = normalizeEmployeePhone(phone);
+    if (!normalized) {
+      setFormError("מספר טלפון לא תקין — יש להזין מספר נייד ישראלי");
+      return;
+    }
+    setFormError("");
+    setBusy(true);
+    const { error: err } = await supabase
+      .from("employees")
+      .insert({ name: name.trim(), phone: normalized });
+    setBusy(false);
+    if (err) {
+      setFormError(
+        err.code === "23505"
+          ? "מספר טלפון זה כבר רשום במערכת"
+          : "ההוספה נכשלה — נסו שוב",
+      );
+      return;
+    }
+    setName("");
+    setPhone("");
+    setShowAdd(false);
+    load();
+  }
+
+  function startEdit(item) {
+    setEditingId(item.id);
+    setEditForm({
+      name: item.name,
+      phone: item.phone ? formatEmployeePhone(item.phone) : "",
+    });
+    setEditError("");
+  }
+
+  async function saveEdit(item) {
+    if (!editForm.name.trim()) {
+      setEditError("יש להזין שם");
+      return;
+    }
+    const normalized = normalizeEmployeePhone(editForm.phone);
+    if (!normalized) {
+      setEditError("מספר טלפון לא תקין — יש להזין מספר נייד ישראלי");
+      return;
+    }
+    setEditBusy(true);
+    const { error: err } = await supabase
+      .from("employees")
+      .update({ name: editForm.name.trim(), phone: normalized })
+      .eq("id", item.id);
+    setEditBusy(false);
+    if (err) {
+      setEditError(
+        err.code === "23505"
+          ? "מספר טלפון זה כבר רשום במערכת"
+          : "השמירה נכשלה — נסו שוב",
+      );
+      return;
+    }
+    setEditingId(null);
+    load();
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {error && <p className="err">{error}</p>}
+      <CollapsibleSection
+        title="רשימת עובדים"
+        count={items?.length}
+        open={drawerOpen}
+        onOpenChange={(nextOpen) => {
+          setDrawerOpen(nextOpen);
+          if (!nextOpen) setShowAdd(false);
+        }}
+        headerAction={
+          drawerOpen && (
+            <button
+              className="btn btn-accent text-sm !min-h-[30px]"
+              disabled={showAdd}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowAdd(true);
+              }}
+            >
+              <PlusIcon size={16} />
+              הוספת עובד
+            </button>
+          )
+        }
+      >
+        {showAdd && (
+          <form onSubmit={add} className="card p-4 mb-3">
+            <h3 className="font-bold mb-3">הוספת עובד</h3>
+            <div className="flex gap-2 items-start flex-wrap">
+              <div className="flex-1 min-w-[220px]">
+                <input
+                  className="input"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="שם העובד"
+                  aria-label="שם העובד"
+                  autoFocus
+                />
+              </div>
+              <div className="flex-1 min-w-[220px]">
+                <input
+                  className="input"
+                  dir="ltr"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="050-1234567"
+                  aria-label="מספר טלפון"
+                />
+              </div>
+              <button className="btn btn-accent" disabled={busy}>
+                {busy ? <SpinnerIcon size={18} /> : <PlusIcon size={18} />}
+                הוספה
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={busy}
+                onClick={() => setShowAdd(false)}
+              >
+                ביטול
+              </button>
+            </div>
+            {formError && <p className="err mt-2">{formError}</p>}
+          </form>
+        )}
+        <ul className="flex flex-col gap-2">
+          {(items || []).map((item) => (
+            <li
+              key={item.id}
+              className={`card p-4 flex items-center gap-3 flex-wrap ${item.is_active ? "" : "opacity-55"}`}
+            >
+              {editingId === item.id ? (
+                <div className="flex-1 min-w-[240px] grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="label !text-xs">שם *</label>
+                    <input
+                      className="input !min-h-[30px]"
+                      value={editForm.name}
+                      onChange={(e) =>
+                        setEditForm((f) => ({ ...f, name: e.target.value }))
+                      }
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="label !text-xs">טלפון</label>
+                    <input
+                      className="input !min-h-[30px]"
+                      dir="ltr"
+                      value={editForm.phone}
+                      onChange={(e) =>
+                        setEditForm((f) => ({ ...f, phone: e.target.value }))
+                      }
+                    />
+                  </div>
+                  {editError && (
+                    <p className="err sm:col-span-2">{editError}</p>
+                  )}
+                  <div className="sm:col-span-2 flex gap-2">
+                    <button
+                      className="btn btn-outline text-sm !min-h-[34px]"
+                      disabled={editBusy}
+                      onClick={() => saveEdit(item)}
+                      aria-label="שמירה"
+                    >
+                      {editBusy ? (
+                        <SpinnerIcon size={16} />
+                      ) : (
+                        <CheckIcon size={16} />
+                      )}
+                      שמירה
+                    </button>
+                    <button
+                      className="btn btn-ghost text-sm !min-h-[34px]"
+                      disabled={editBusy}
+                      onClick={() => setEditingId(null)}
+                      aria-label="ביטול"
+                    >
+                      <XIcon size={16} />
+                      ביטול
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold truncate">
+                      {item.name}
+                      {!item.is_active && (
+                        <span className="text-xs text-primary font-normal ms-2">
+                          (מושבת)
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-primary text-right" dir="ltr">
+                      {item.phone ? formatEmployeePhone(item.phone) : "—"}
+                    </p>
+                  </div>
+                  <button
+                    className="btn btn-ghost text-sm !min-h-[34px]"
+                    onClick={() => startEdit(item)}
+                    aria-label="עריכת עובד"
+                  >
+                    <PencilIcon size={16} />
+                  </button>
+                  <ActiveToggle
+                    item={item}
+                    onToggle={() => toggleActive(item)}
+                  />
+                </>
+              )}
+            </li>
+          ))}
+          {items?.length === 0 && (
+            <li className="card p-6 text-center text-primary">
+              אין עובדים עדיין
+            </li>
+          )}
+          {items === null && (
+            <li className="flex justify-center py-8 text-primary">
+              <SpinnerIcon size={28} />
+            </li>
+          )}
+        </ul>
+      </CollapsibleSection>
+    </div>
+  );
+}
+
+const MENU_CATEGORY_LABELS = {
+  main_dish: "מנה עיקרית",
+  addition: "תוספת",
+  salad: "סלט",
+};
+
+function LunchMenuSection() {
+  const { items, error, setError, load, toggleActive } = useAdminList(
+    "lunch_menu_items",
+    "id, category, name, is_active, created_at",
+  );
+  const [showAdd, setShowAdd] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState("main_dish");
+  const [formError, setFormError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function add(e) {
+    e.preventDefault();
+    if (!name.trim()) {
+      setFormError("יש להזין שם");
+      return;
+    }
+    setFormError("");
+    setBusy(true);
+    const { error: err } = await supabase
+      .from("lunch_menu_items")
+      .insert({ name: name.trim(), category });
+    setBusy(false);
+    if (err) {
+      setFormError("ההוספה נכשלה — נסו שוב");
+      return;
+    }
+    setName("");
+    setShowAdd(false);
+    load();
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {error && <p className="err">{error}</p>}
+      <CollapsibleSection
+        title="פריטי תפריט"
+        count={items?.length}
+        open={drawerOpen}
+        onOpenChange={(nextOpen) => {
+          setDrawerOpen(nextOpen);
+          if (!nextOpen) setShowAdd(false);
+        }}
+        headerAction={
+          drawerOpen && (
+            <button
+              className="btn btn-accent text-sm !min-h-[30px]"
+              disabled={showAdd}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowAdd(true);
+              }}
+            >
+              <PlusIcon size={16} />
+              הוספת פריט
+            </button>
+          )
+        }
+      >
+        {showAdd && (
+          <form onSubmit={add} className="card p-4 mb-3">
+            <h3 className="font-bold mb-3">הוספת פריט לתפריט</h3>
+            <div className="flex gap-2 items-start flex-wrap">
+              <div className="flex-1 min-w-[220px]">
+                <input
+                  className="input"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="שם הפריט"
+                  aria-label="שם הפריט"
+                  autoFocus
+                />
+              </div>
+              <select
+                className="input flex-1 min-w-[160px]"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                aria-label="קטגוריה"
+              >
+                {Object.entries(MENU_CATEGORY_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <button className="btn btn-accent" disabled={busy}>
+                {busy ? <SpinnerIcon size={18} /> : <PlusIcon size={18} />}
+                הוספה
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={busy}
+                onClick={() => setShowAdd(false)}
+              >
+                ביטול
+              </button>
+            </div>
+            {formError && <p className="err mt-2">{formError}</p>}
+          </form>
+        )}
+        {items === null ? (
+          <div className="flex justify-center py-8 text-primary">
+            <SpinnerIcon size={28} />
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {Object.entries(MENU_CATEGORY_LABELS).map(([cat, label]) => {
+              const catItems = items.filter((i) => i.category === cat);
+              return (
+                <div key={cat}>
+                  <p className="text-xs font-bold text-primary mb-2">{label}</p>
+                  <ul className="flex flex-col gap-2">
+                    {catItems.map((item) => (
+                      <li
+                        key={item.id}
+                        className={`card p-4 flex items-center gap-3 flex-wrap ${item.is_active ? "" : "opacity-55"}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold truncate">
+                            {item.name}
+                            {!item.is_active && (
+                              <span className="text-xs text-primary font-normal ms-2">
+                                (מושבת)
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                        <ActiveToggle
+                          item={item}
+                          onToggle={() => toggleActive(item)}
+                        />
+                      </li>
+                    ))}
+                    {catItems.length === 0 && (
+                      <li className="card p-4 text-center text-sm text-primary">
+                        אין פריטים בקטגוריה זו
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CollapsibleSection>
+    </div>
+  );
+}
+
+function LunchTab() {
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h3 className="font-bold mb-3">עובדים</h3>
+        <LunchEmployeesSection />
+      </div>
+      <div>
+        <h3 className="font-bold mb-3">תפריט</h3>
+        <LunchMenuSection />
+      </div>
+    </div>
+  );
 }
 
 export default function ManagerSettings() {
-  const [tab, setTab] = useState('clients')
+  const [tab, setTab] = useState("clients");
 
   return (
-    <div className="min-h-dvh">
+    <div className="min-h-dvh manager-desktop">
       <Header backTo="/manager" title="ניהול המערכת" />
       <main className="mx-auto max-w-7xl px-4 py-6">
         <h1 className="text-2xl font-black">ניהול המערכת</h1>
         <p className="text-primary mt-1 text-sm">
-          לקוחות, פרויקטים וראשי צוות — מחיקה מסתירה את הפריט לצמיתות, ההיסטוריה נשמרת
+          לקוחות, פרויקטים וראשי צוות — מחיקה מסתירה את הפריט לצמיתות, ההיסטוריה
+          נשמרת
         </p>
 
         <div className="mt-5 flex gap-2 border-b border-border">
@@ -965,8 +1690,8 @@ export default function ManagerSettings() {
               onClick={() => setTab(key)}
               className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 -mb-px transition-colors duration-200 ${
                 tab === key
-                  ? 'border-accent text-accent'
-                  : 'border-transparent text-primary hover:text-foreground'
+                  ? "border-accent text-accent"
+                  : "border-transparent text-primary hover:text-foreground"
               }`}
             >
               <Icon size={18} />
@@ -976,11 +1701,12 @@ export default function ManagerSettings() {
         </div>
 
         <div className="mt-5">
-          {tab === 'clients' && <ClientsTab />}
-          {tab === 'leads' && <LeadsTab />}
-          {tab === 'catalog' && <CatalogTab />}
+          {tab === "clients" && <ClientsTab />}
+          {tab === "leads" && <LeadsTab />}
+          {tab === "catalog" && <CatalogTab />}
+          {tab === "lunch" && <LunchTab />}
         </div>
       </main>
     </div>
-  )
+  );
 }
