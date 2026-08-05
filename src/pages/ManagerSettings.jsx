@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import Header from "../components/Header";
 import {
+  ClipboardIcon,
   UsersIcon,
   HardHatIcon,
   PlusIcon,
@@ -1660,6 +1662,18 @@ function LunchTab() {
     <div className="flex flex-col gap-6">
       <div>
         <h3 className="font-bold mb-3">עובדים</h3>
+        <Link
+          to="/manager/lunch-report"
+          className="card p-4 flex items-center gap-4 hover:border-accent transition-colors duration-200 mb-4"
+        >
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-white">
+            <ClipboardIcon size={24} />
+          </span>
+          <div>
+            <p className="text-sm font-bold leading-tight">דוח ארוחות חודשי</p>
+            <p className="text-sm text-primary mt-1">מעבר לדוח הצהריים</p>
+          </div>
+        </Link>
         <LunchEmployeesSection />
       </div>
       <div>
