@@ -1,6 +1,6 @@
-# Enbar — Lunch Ordering (Self-Service via QR) — PRD v4 (Final)
+# Enbar — Lunch Ordering (Self-Service via QR) — PRD v4 (Final, incl. admin UI refinements)
 
-**Supersedes v3.** All open decisions from v3 (D5, D6) are now closed. The database migration described here has **already been applied** to the live Supabase project (`enbar-bot`, ref `svsuntixvxwwuggtqsws`) — this document now also serves as the as-built reference for the Claude Code implementation prompt (frontend only; backend/schema work is done).
+**Supersedes v3.** All open decisions from v3 (D5, D6) are now closed, plus two later UI refinements (D13, D14) requested directly during the Claude Code implementation pass. The database migration described here has **already been applied** to the live Supabase project (`enbar-bot`, ref `svsuntixvxwwuggtqsws`), and the frontend has **already been implemented** by Claude Code — this document is now the as-built reference, kept in sync with what was actually asked for and built.
 
 If v3 was saved to `enbar-app/enbar-app - PRD/`, replace it with this file.
 
@@ -83,8 +83,6 @@ Since direct `SELECT` on `employees` and `lunch_orders` is manager-only, the no-
 
 None of these four functions expose more than their stated purpose — in particular, there is no RPC that lets an anonymous caller browse the full employee list or historical order data.
 
-**Added during frontend implementation (2026-08-04):** a 5th function, **`lunch_update_order(order_id, main_dish_id, addition_id, salad_1_id, salad_2_id)`** — `SECURITY DEFINER`, same pattern as the four above, enforcing `order_date = current_date` internally. Required because the direct-table `UPDATE`/`DELETE` policies described below turned out to be unreachable for `anon` in practice: Postgres RLS requires a role to have SELECT visibility on a row before UPDATE/DELETE can locate it at all, confirmed live via `EXPLAIN` (`One-Time Filter: false`). Since `lunch_orders` SELECT is manager-only by design (§4), the UPDATE policy's own `order_date = CURRENT_DATE` condition was never reached — any anon UPDATE silently affected 0 rows regardless of date. INSERT was unaffected (no existing row to locate). No DELETE RPC was added — the `/lunch` flow never deletes an order, only inserts or updates (§5.1, §6.1).
-
 ---
 
 ## 5. Screens
@@ -114,8 +112,17 @@ None of these four functions expose more than their stated purpose — in partic
 - No server-side automation — fully client-side, generated on-demand whenever the URL is opened after 12:00.
 
 ### 5.3 Admin — `/manager/settings` (office manager only, requires real `factory_manager` auth session)
-- **Employee roster:** name + phone, add / deactivate, same list-pattern as clients/projects/team leads.
-- **Menu catalog:** one list (not three), each row tagged main dish / addition / salad via `category`; add / deactivate.
+**Note on device context:** the entire `/manager` area (including this tab) is desktop-oriented, consistent with the rest of the manager dashboard (the reverse-engineered PRD already describes the manager reviewing reports "on a desktop dashboard") — unlike the mobile-first team-lead-facing screens (`/lunch`, `/lunch/today`), controls here do not need thumb-sized touch targets.
+
+**One tab, "עובדים"** (icon: represents workers/people, not food — this is a people-management tab, the food association belongs to the catalog sub-section only, not the tab itself), containing two sub-sections (not two separate top-level tabs):
+- **Employee roster:** name + phone, add / **toggle active-inactive**, same list-pattern as clients/projects/team leads except using a toggle switch rather than a "השבתה" button/label. Each row shows the phone number **under the employee's name, aligned to the right side, displayed without the country code** (e.g. `050-1234567`, not `+972501234567`) — even if the stored value includes a country code for matching purposes in `lunch_lookup_employee`, the display strips it for readability.
+- **Menu catalog:** one list (not three), each row tagged main dish / addition / salad via `category`; add / **toggle active-inactive**, same toggle-switch pattern as the employee roster.
+
+**Both sub-sections are collapsed/closed drawers by default** — the office manager sees each drawer's title bar without its list rendered open; tapping/clicking expands it to show the existing rows. This applies equally to the employee list and the menu-item list.
+
+**The "add new" button for each sub-section lives inside its own drawer, next to that drawer's title, and only renders while that drawer is expanded** — it is not visible on the closed/collapsed title bar, and is not shared between the two drawers. Opening the employee drawer reveals "add employee" next to its title; opening the menu-catalog drawer reveals "add menu item" next to its title; each disappears again if its drawer is collapsed.
+
+**Inside the menu-catalog drawer, items are grouped into three visually distinct sections** — main dishes (מנות עיקריות), additions (תוספות), and salads (סלטים) — reflecting the `category` column, rather than one flat undifferentiated list. This is a display grouping only; the underlying table remains the single `lunch_menu_items` table with a `category` column (§3), not three separate tables.
 
 ### 5.4 Monthly report — new screen under `/manager` (requires real `factory_manager` auth session)
 - Month selector — works for the current in-progress month and any past month identically.
@@ -159,7 +166,14 @@ Consistent with the rest of the app, across `employees` and `lunch_menu_items`.
 - **D9:** monthly report is always live-computed, no freeze/snapshot.
 - **D10:** "total orders" = count of distinct days ordered, not a sum of food items.
 - **D11 (new in v4):** `employees` is a general-purpose table (not lunch-specific) — confirmed it may be reused by future features, so `is_filler`/`pin` (v1 leftovers) were dropped rather than repurposed.
-- **D12 (new in v4):** `employees` and `lunch_orders` SELECT is restricted to authenticated `factory_manager` sessions — confirmed as intentional, accepting the resulting dependency on the in-progress OTP work for admin/report screens specifically (not for the employee-facing self-order or restaurant-image screens).
+- **D12:** `employees` and `lunch_orders` SELECT is restricted to authenticated `factory_manager` sessions — confirmed as intentional, accepting the resulting dependency on the in-progress OTP work for admin/report screens specifically (not for the employee-facing self-order or restaurant-image screens).
+- **D13 (new):** the two lunch admin screens (employee roster, menu catalog) are one tab ("עובדים") with two collapsed-by-default drawer sub-sections, not two separate top-level tabs.
+- **D14:** each drawer's "add new" button sits inside that drawer, next to its own title — not a shared/external add form. The "עובדים" tab's icon represents workers/people, not food, since the tab is about people management (the catalog sub-section is the only place food-related, and it doesn't need its own tab-level icon).
+- **D15 (new):** the "add new" button only renders while its drawer is expanded — not visible on the collapsed title bar.
+- **D16:** inside the menu-catalog drawer, items display grouped into three visual sections (main dishes / additions / salads) by `category` — display-only grouping, still one underlying table.
+- **D17:** in the employee roster list, phone number displays under the name, right-aligned, with the country code stripped for readability — this is a display concern only, not a change to how the phone is stored or matched by `lunch_lookup_employee`.
+- **D18 (new):** active/inactive state in both the employee roster and menu catalog is controlled via a toggle switch, not a "השבתה" button/label — same underlying deactivate mechanism (`is_active`), different control.
+- **D19 (new):** the `/manager` area (including this tab) is desktop-oriented, consistent with the existing manager dashboard — no need to design its controls for thumb/touch use, unlike `/lunch` and `/lunch/today`.
 
 ---
 

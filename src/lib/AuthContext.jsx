@@ -64,7 +64,9 @@ export function AuthProvider({ children }) {
   }, [session])
 
   useEffect(() => {
-    if (!session) setViewAsTeamLead(null)
+    // session is `undefined` while still loading, `null` once confirmed
+    // signed out — only the latter should drop view-as.
+    if (session === null) setViewAsTeamLead(null)
   }, [session])
 
   const loading = session === undefined || (!!session && !profile && !authError)

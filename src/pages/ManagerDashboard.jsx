@@ -163,7 +163,7 @@ export default function ManagerDashboard() {
         {/* Status row */}
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="card p-4 flex items-center gap-4">
-            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-primary">
+            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-white">
               <ClipboardIcon size={24} />
             </span>
             <div>
