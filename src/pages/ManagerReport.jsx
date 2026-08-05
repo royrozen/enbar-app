@@ -38,7 +38,7 @@ export default function ManagerReport() {
   const issuePhotos = report?.report_photos?.filter((p) => p.kind === 'issue') || []
 
   return (
-    <div className="min-h-dvh">
+    <div className="min-h-dvh manager-desktop">
       <Header backTo="/manager" title="פרטי דוח" />
       <main className="mx-auto max-w-3xl px-4 py-6">
         {error && (

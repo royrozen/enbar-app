@@ -1,16 +1,16 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #F8FAFC;
-  --color-foreground: #16233D;
-  --color-primary: #51637C;
-  --color-primary-dark: #38495F;
-  --color-accent: #14284D;
-  --color-accent-dark: #0A1830;
-  --color-muted: #EEF2F7;
-  --color-border: #DCE3EC;
-  --color-destructive: #DC2626;
-  --color-success: #16A34A;
+  --color-background: #f8fafc;
+  --color-foreground: #16233d;
+  --color-primary: #51637c;
+  --color-primary-dark: #38495f;
+  --color-accent: #14284d;
+  --color-accent-dark: #0a1830;
+  --color-muted: #eef2f7;
+  --color-border: #dce3ec;
+  --color-destructive: #dc2626;
+  --color-success: #16a34a;
   --font-sans: "Heebo", system-ui, -apple-system, sans-serif;
 }
 
@@ -41,7 +41,12 @@ body {
     cursor: pointer;
     user-select: none;
     text-align: center;
-    transition: background-color 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s, transform 0.15s;
+    transition:
+      background-color 0.2s,
+      border-color 0.2s,
+      color 0.2s,
+      box-shadow 0.2s,
+      transform 0.15s;
   }
   .btn:disabled {
     opacity: 0.5;
@@ -103,7 +108,9 @@ body {
     font-size: 1rem;
     min-height: 52px;
     color: var(--color-foreground);
-    transition: border-color 0.2s, box-shadow 0.2s;
+    transition:
+      border-color 0.2s,
+      box-shadow 0.2s;
   }
   .input:focus {
     border-color: var(--color-accent);
@@ -137,6 +144,26 @@ body {
     margin-bottom: 0.4rem;
     font-weight: 700;
     font-size: 0.95rem;
+  }
+  .manager-desktop .btn {
+    min-height: 34px;
+    padding: 0 0.9rem;
+    font-size: 0.92rem;
+    border-radius: 0.65rem;
+  }
+  .manager-desktop .btn-ghost {
+    min-height: 30px;
+    padding: 0 0.6rem;
+  }
+  .manager-desktop .input {
+    min-height: 38px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.95rem;
+    border-radius: 0.65rem;
+  }
+  .manager-desktop .label {
+    margin-bottom: 0.25rem;
+    font-size: 0.85rem;
   }
   .card {
     background: #fff;

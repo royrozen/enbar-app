@@ -10,6 +10,11 @@ export function normalizeEmployeePhone(input) {
   return withPlus ? withPlus.slice(1) : null
 }
 
+// Display-only inverse: 972XXXXXXXXX -> 0XXXXXXXXX (local format, no country code).
+export function formatEmployeePhone(phone) {
+  return phone?.startsWith('972') ? `0${phone.slice(3)}` : phone || ''
+}
+
 // D5 (PRD §7) — explicitly a placeholder, replace with the real restaurant
 // number before/at launch. Kept as a single named constant so it's easy to find.
 export const RESTAURANT_WHATSAPP_NUMBER = '972503338181'
