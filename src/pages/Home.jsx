@@ -13,7 +13,7 @@ const TYPE_CHIPS = [
   { value: '', label: 'הכל' },
   { value: 'report', label: 'יומן עבודה' },
   { value: 'part', label: 'הזמנת חלקים' },
-  { value: 'exception', label: 'אישור עבודה נוספת' },
+  { value: 'exception', label: 'אישורי עבודה נוספת' },
 ]
 
 const PART_ORDER_SELECT =
@@ -115,21 +115,24 @@ export default function Home() {
             className="card p-4 flex flex-col items-center justify-center gap-2 text-center hover:border-accent transition-colors duration-200"
           >
             <ClipboardIcon size={26} className="text-accent" />
-            <span className="text-sm font-bold">יומן עבודה</span>
+            <span className="text-sm font-medium">יומן עבודה</span>
+            <span className="text-xs text-primary">{todaysReports.length} דוחות היום</span>
           </Link>
           <Link
             to="/parts/new"
             className="card p-4 flex flex-col items-center justify-center gap-2 text-center hover:border-accent transition-colors duration-200"
           >
             <PackageIcon size={26} className="text-accent" />
-            <span className="text-sm font-bold">הזמנת חלקים</span>
+            <span className="text-sm font-medium">הזמנת חלקים</span>
+            <span className="text-xs text-primary">{todaysPartOrders.length} הזמנות היום</span>
           </Link>
           <Link
             to="/exceptions/new"
             className="card p-4 flex flex-col items-center justify-center gap-2 text-center hover:border-accent transition-colors duration-200"
           >
             <AlertIcon size={26} className="text-accent" />
-            <span className="text-sm font-bold">אישור עבודה נוספת</span>
+            <span className="text-sm font-medium">אישורי עבודה נוספת</span>
+            <span className="text-xs text-primary">{todaysExceptions.length} אישורים היום</span>
           </Link>
         </div>
 
@@ -224,7 +227,7 @@ export default function Home() {
                     <div className="flex-1 min-w-0">
                       <p className="font-bold truncate">{ex.projects?.name || 'פרויקט'}</p>
                       <p className="text-sm text-primary mt-0.5">
-                        אישור עבודה נוספת · {d % 1 === 0 ? d : d.toFixed(1)} ימי חיוב
+                        אישורי עבודה נוספת · {d % 1 === 0 ? d : d.toFixed(1)} ימי חיוב
                       </p>
                     </div>
                     <StatusBadge status={ex.status} />

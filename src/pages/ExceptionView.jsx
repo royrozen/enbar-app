@@ -404,7 +404,7 @@ export default function ExceptionView({ backTo = "/home" }) {
     <div className={`min-h-dvh ${editing ? "pb-32" : ""}`}>
       <Header
         backTo={backTo}
-        title={editing ? "עריכת אישור עבודה נוספת" : "אישור עבודה נוספת"}
+        title={editing ? "עריכת אישורי עבודה נוספת" : "אישורי עבודה נוספת"}
       />
       <main className="mx-auto max-w-3xl px-4 py-6">
         {error && (

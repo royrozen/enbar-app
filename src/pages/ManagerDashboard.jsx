@@ -29,6 +29,7 @@ export default function ManagerDashboard() {
   const [reports, setReports] = useState(null);
   const [stats, setStats] = useState({
     today: null,
+    todayExceptions: null,
     pendingExceptions: null,
     pendingParts: null,
   });
@@ -41,35 +42,46 @@ export default function ManagerDashboard() {
     // a backdated report filed today still came in today from the manager's view.
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
-    const [projRes, leadRes, todayRes, pendingRes, pendingPartsRes] =
-      await Promise.all([
-        supabase
-          .from("projects")
-          .select("id, name")
-          .is("deleted_at", null)
-          .order("name"),
-        supabase
-          .from("team_leads")
-          .select("id, name")
-          .is("deleted_at", null)
-          .order("name"),
-        supabase
-          .from("reports")
-          .select("id", { count: "exact", head: true })
-          .gte("created_at", startOfToday.toISOString()),
-        supabase
-          .from("exception_logs")
-          .select("id", { count: "exact", head: true })
-          .neq("status", "approved"),
-        supabase
-          .from("part_orders")
-          .select("id", { count: "exact", head: true })
-          .eq("status", "pending"),
-      ]);
+    const [
+      projRes,
+      leadRes,
+      todayRes,
+      todayExceptionsRes,
+      pendingRes,
+      pendingPartsRes,
+    ] = await Promise.all([
+      supabase
+        .from("projects")
+        .select("id, name")
+        .is("deleted_at", null)
+        .order("name"),
+      supabase
+        .from("team_leads")
+        .select("id, name")
+        .is("deleted_at", null)
+        .order("name"),
+      supabase
+        .from("reports")
+        .select("id", { count: "exact", head: true })
+        .gte("created_at", startOfToday.toISOString()),
+      supabase
+        .from("exception_logs")
+        .select("id", { count: "exact", head: true })
+        .gte("created_at", startOfToday.toISOString()),
+      supabase
+        .from("exception_logs")
+        .select("id", { count: "exact", head: true })
+        .neq("status", "approved"),
+      supabase
+        .from("part_orders")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending"),
+    ]);
     setProjects(projRes.data || []);
     setLeads(leadRes.data || []);
     setStats({
       today: todayRes.count ?? 0,
+      todayExceptions: todayExceptionsRes.count ?? 0,
       pendingExceptions: pendingRes.count ?? 0,
       pendingParts: pendingPartsRes.count ?? 0,
     });
@@ -195,10 +207,11 @@ export default function ManagerDashboard() {
             </span>
             <div>
               <p className="text-3xl font-black leading-none text-accent">
-                {stats.pendingExceptions ?? "—"}
+                {stats.todayExceptions ?? "—"}
               </p>
-              <p className="text-sm text-primary mt-1">
-                אישורי עבודה נוספת ממתינים
+              <p className="text-sm text-primary mt-1">אישורי עבודה נוספת היום</p>
+              <p className="text-xs text-primary mt-0.5">
+                {stats.pendingExceptions ?? "—"} ממתינות לחתימת לקוח
               </p>
             </div>
           </Link>
