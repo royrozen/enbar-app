@@ -209,7 +209,7 @@ export default function SignRequest() {
       {state === 'form' && data && (
         <div className="w-full max-w-lg flex flex-col gap-5">
           <section className="card p-5">
-            <h1 className="text-xl font-black mb-1">אישור עבודה נוספת</h1>
+            <h1 className="text-xl font-black mb-1">אישורי עבודה נוספת</h1>
             <p className="text-sm text-primary mb-3">
               {data.client_name}
               {data.project_name ? ` · ${data.project_name}` : ''}

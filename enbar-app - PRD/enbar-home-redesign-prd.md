@@ -24,13 +24,15 @@ No change to the access model. `team_lead` profile only; same `localStorage` fla
 
 1. **יומן עבודה** (Work Log) — replaces today's "+ דוח חדש" CTA. Tap → `/report/new` (unchanged form).
 2. **הזמנת חלקים** (Part Ordering) — replaces today's "הזמן חלק" button. Tap → `/parts/new` (unchanged form).
-3. **יומן חריגים** (Exceptions Log) — **placeholder, not wired to any flow this phase.** Rendered visually muted (reduced opacity, no hover/active state) with a small "בקרוב" (coming soon) badge. It is **not** a link or button — tapping it does nothing; there is no toast, alert, or dialog (the app has no toast/dialog primitive today — see `src/components/`, and introducing one is out of scope for this phase).
+3. **אישורי עבודה נוספת** (Exceptions Log) — originally shipped as a placeholder (muted, "בקרוב" badge, no tap target); **superseded by `enbar-exceptions-log-prd.md` §3d**, which wired it live as a `Link` to `/exceptions/new` and dropped the placeholder styling.
+
+**Card content (post-launch revision, all three cards):** title uses `font-medium` (weight 500); directly below it, a subtitle shows the count of that type's entries **created today** (`created_at`), unfiltered by status: "X דוחות היום" (work log), "X הזמנות היום" (part ordering), "X אישורים היום" (exceptions). Icon, card chrome, and hover state unchanged.
 
 **Bottom: "הפעילות שלי היום" (My activity today) — a single merged list.**
 
 Section header row: title on the start side, **"דוחות ישנים"** (historical reports) link/button on the end side (same placement convention as the "רענון" ghost button in `ManagerDashboard.jsx`/`ManagerParts.jsx` headers) → navigates to the new `/history` screen (§3c).
 
-Below the header, a type-filter chip row (reusing the existing `StatusChips` component with a new value set, not the status values): **הכל / יומן עבודה / הזמנת חלקים / יומן חריגים**.
+Below the header, a type-filter chip row (reusing the existing `StatusChips` component with a new value set, not the status values): **הכל / יומן עבודה / הזמנת חלקים / אישורי עבודה נוספת**.
 
 **List contents — only entries dated today** (see D2 for what "today" means for reports), across the two types that exist today, newest-first:
 
@@ -46,7 +48,7 @@ Both existing row/drawer components already built this session for `Home.jsx` ar
 
 - No entries at all today, any type: card with icon, "עדיין לא דיווחתם היום", no secondary prompt needed (the three cards above are already the prompt).
 - Entries exist today but none match the selected type filter: "לא נמצאו רשומות מסוג זה היום" (same pattern as the existing "לא נמצאו בקשות בסטטוס זה" empty state).
-- "יומן חריגים" filter selected: always empty this phase (§6, D1 decides whether the chip itself is even shown).
+- "אישורי עבודה נוספת" filter selected: always empty this phase (§6, D1 decides whether the chip itself is even shown).
 
 ### 3b. Editing — `/report/:id` and `/parts/:id` (conditional)
 
@@ -75,7 +77,7 @@ Both existing detail routes gain a conditional edit mode: **if the entry is "tod
 
 New team-lead-only route (`RequireProfile`, same guard as `/home`). Fields in render order:
 
-1. **סוג** (Type) — same chip set as the today-list filter: הכל / יומן עבודה / הזמנת חלקים / יומן חריגים.
+1. **סוג** (Type) — same chip set as the today-list filter: הכל / יומן עבודה / הזמנת חלקים / אישורי עבודה נוספת.
 2. **פרויקט** (Project) — select populated from **all** projects, active and inactive (mirrors `ManagerDashboard.jsx`'s existing project filter, which already includes inactive projects — precedent already established in this codebase, not a new decision).
 3. **טווח תאריכים** (Date range) — `from`/`to` date inputs, same pattern as `ManagerDashboard.jsx`/`ManagerParts.jsx`. Default range is an open decision (§6, D6).
 
@@ -109,7 +111,7 @@ Below the filters: a read-only results list, reusing the same row/drawer renderi
 
 ## 6. Conflicts & decisions needed
 
-- **D1 — Does the "יומן חריגים" type filter chip appear before the feature exists?** It will always return zero results this phase. Showing it now is forward-compatible (users learn the filter exists) but exposes a permanently-empty option; hiding it is simpler but means adding it back later. **Not decided here** — needs product sign-off.
+- **D1 — Does the "אישורי עבודה נוספת" type filter chip appear before the feature exists?** It will always return zero results this phase. Showing it now is forward-compatible (users learn the filter exists) but exposes a permanently-empty option; hiding it is simpler but means adding it back later. **Not decided here** — needs product sign-off.
 - **D2 — What does "today" mean for a report?** `report_date` is a business date the team lead can backdate (form caps it at `<= today` but doesn't prevent picking yesterday) — it means "the work happened on this date." `created_at` means "this row was submitted today," regardless of which date it's about. These can disagree (a report about yesterday's work, filed today). The today-list and the edit-window gate need to pick one. Part requests have no equivalent ambiguity — they only have `created_at`. **Not decided here.**
 - **D3 — Editing `extras_description` after the manager has already acted on it.** §3b restricts extras editing to `extras_status IN ('pending', null)` as a proposed default — editing the change-order text after a manager has already generated a PDF or moved status to `sent`/`approved`/`rejected` would silently invalidate a document that's already out the door. This mirrors D5 below but for reports; the outline didn't ask for it explicitly, flagging proactively. **Needs explicit confirmation, not just the proposed default.**
 - **D4 — Report photo removal.** No RLS policy exists to delete or hide an individual `report_photos` row (§4). Options: (a) v1 ships add-only, no removal (proposed default in §3b); (b) add a `DELETE` policy; (c) add an `is_active` column and filter it out on read, keeping the no-hard-delete convention. **Not decided here** — needs a migration either way if anything beyond "add-only" is required.

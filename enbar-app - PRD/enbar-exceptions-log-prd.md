@@ -1,4 +1,4 @@
-# Enbar — Exceptions Log (יומן חריגים) — PRD
+# Enbar — Exceptions Log (אישורי עבודה נוספת) — PRD
 
 **Scope:** one new standalone workflow added to the live app, wired into the placeholder card the home redesign shipped (`enbar-home-redesign-prd.md` §3a) — **and the full replacement of the in-report extras workflow**, which is removed from the UI and dropped from the schema (§3e, decided by the product owner during review). Documents out-of-scope work discovered in the field, prices it in billable days, and runs a client-signature loop before the work may be performed. Reuses the extras machinery end to end: the `pdfmake` + `src/lib/rtl.js` Hebrew PDF pipeline, the `signed-approvals` bucket convention, photo upload with client-side compression, client→project selection, draft autosave, and the existing Hebrew loading/empty/error states. Architecture unchanged: React SPA → Supabase with the anon key, no server, no auth.
 
@@ -25,7 +25,7 @@ Attribution follows the existing convention: `team_lead_id` = the single active 
 
 ### 3a. New exception log — `/exceptions/new` (team lead)
 
-Reached from the **יומן חריגים** home card (placeholder becomes a live link; "בקרוב" badge and muted styling removed). Fields in render order:
+Reached from the **אישורי עבודה נוספת** home card (placeholder becomes a live link; "בקרוב" badge and muted styling removed). Fields in render order:
 
 1. **לקוח** (Client) — required select, active clients only; identical component/behavior to the report form.
 2. **פרויקט** (Project) — shown only when the client has more than one active project; auto-selected when exactly one (existing pattern).
@@ -60,12 +60,12 @@ No `rejected` state, no backward transitions out of `approved` (D5). Every trans
 
 ### 3c. Manager area — `/manager/exceptions` (list) + detail
 
-- **Insertion point on `/manager`:** the existing "חריגות ממתינות לאישור" extras stat card is **replaced** by "יומני חריגים ממתינים" (count of status ≠ `approved`), clickable → `/manager/exceptions` — same card slot, same pattern as the parts card.
+- **Insertion point on `/manager`:** the existing "חריגות ממתינות לאישור" extras stat card is **replaced** by an "אישורי עבודה נוספת" stat card, clickable → `/manager/exceptions` — same card slot, same pattern as the parts card. **Revised post-launch:** the card shows two counters, not one — primary number is exception logs *created today* (`created_at`), label "אישורי עבודה נוספת היום"; a secondary smaller line shows the running total not yet `approved` (still waiting on the customer's signature), text "{n} ממתינות לחתימת לקוח".
 - **List:** rows show project, client, team lead, creation date, billable days, status badge; filters: status chips (`StatusChips`), project select, date range — same layout as `/manager/parts`. Tapping opens the shared detail (3b) under the manager guard.
 
 ### 3d. Home-screen integration (team lead)
 
-- The יומן חריגים card becomes a `Link` to `/exceptions/new`.
+- The card becomes a `Link` to `/exceptions/new`. Post-launch it also gained a today-count subtitle, matching the other two home cards — see `enbar-home-redesign-prd.md` §3a.
 - The unified today-list gains the third type: exception rows (`created_at`-based like everything else) show date badge "היום", project name, billable-days summary ("2.5 ימי חיוב"), and status badge. The existing filter chip now returns results.
 - `/history` gains the same third type, date-filtered by `created_at`.
 - **Edit window (D6):** exceptions are editable **until approved** — not today-only. The today-only rule continues to apply to reports and part requests.
