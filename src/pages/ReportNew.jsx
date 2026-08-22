@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Header from '../components/Header'
 import PhotoUploader from '../components/PhotoUploader'
+import DateField from '../components/DateField'
 import {
   PlusIcon,
   MinusIcon,
@@ -48,6 +49,7 @@ export default function ReportNew() {
   const [progress, setProgress] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [done, setDone] = useState(null)
+  const [markedDates, setMarkedDates] = useState(new Set())
 
   const totalPhotos = workPhotos.length + issuePhotos.length
   const remaining = MAX_PHOTOS - totalPhotos
@@ -59,7 +61,7 @@ export default function ReportNew() {
         const [{ data: cls, error: cErr }, { data: activeLead }] = await Promise.all([
           supabase
             .from('clients')
-            .select('id, name, projects(id, name, city, is_active, deleted_at)')
+            .select('id, name, projects(id, name, city, is_active, deleted_at, created_at)')
             .eq('is_active', true)
             .is('deleted_at', null)
             .order('name'),
@@ -92,6 +94,8 @@ export default function ReportNew() {
 
   const selectedClient = (clients || []).find((c) => c.id === clientId) || null
   const clientProjects = selectedClient?.projects || []
+  const selectedProject = clientProjects.find((p) => p.id === projectId) || null
+  const minDate = selectedProject?.created_at?.slice(0, 10) || undefined
 
   // A client with exactly one active project is resolved automatically; with
   // more than one the team lead must pick which project the report is for.
@@ -103,6 +107,26 @@ export default function ReportNew() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId, clients])
+
+  // "Already logged" indicator (enbar-backdated-reports-prd.md §3c/D4) — one
+  // lightweight query per project selection, no per-day-cell query.
+  useEffect(() => {
+    let cancelled = false
+    if (!projectId) {
+      setMarkedDates(new Set())
+      return
+    }
+    supabase
+      .from('reports')
+      .select('report_date')
+      .eq('project_id', projectId)
+      .then(({ data }) => {
+        if (!cancelled) setMarkedDates(new Set((data || []).map((r) => r.report_date)))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [projectId])
 
   // Draft auto-save (text only, not photos)
   useEffect(() => {
@@ -120,6 +144,7 @@ export default function ReportNew() {
     else if (clientProjects.length > 1 && !projectId) errs.project = 'יש לבחור פרויקט עבור לקוח זה'
     if (!date) errs.date = 'יש לבחור תאריך'
     else if (date > todayISO()) errs.date = 'לא ניתן לדווח על תאריך עתידי'
+    else if (minDate && date < minDate) errs.date = 'לא ניתן לדווח על תאריך שלפני תחילת הפרויקט'
     if (desc.trim().length < 5) errs.desc = 'יש להזין תיאור עבודה של 5 תווים לפחות'
     const w = Number(workers)
     if (!Number.isInteger(w) || w < 1 || w > 50) errs.workers = 'מספר העובדים חייב להיות בין 1 ל־50'
@@ -295,23 +320,21 @@ export default function ReportNew() {
             </div>
           )}
 
-          {/* 2. Date */}
-          <div data-error={!!errors.date}>
-            <label htmlFor="date" className="label">
-              תאריך <span className="text-destructive">*</span>
-            </label>
-            <input
+          {/* 2. Date — appears once a project is resolved (client → project → date) */}
+          {projectId && (
+            <DateField
               id="date"
-              type="date"
-              className="input"
+              label="תאריך"
+              required
               value={date}
+              onChange={setDate}
+              min={minDate}
               max={todayISO()}
-              onChange={(e) => setDate(e.target.value)}
-              aria-invalid={!!errors.date}
+              markedDates={markedDates}
+              error={errors.date}
               disabled={submitting}
             />
-            {errors.date && <p className="err">{errors.date}</p>}
-          </div>
+          )}
 
           {/* 3. Work description */}
           <div data-error={!!errors.desc}>
