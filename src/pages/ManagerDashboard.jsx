@@ -398,9 +398,10 @@ export default function ManagerDashboard() {
                   <li key={`report-${r.id}`}>
                     <Link
                       to={`/manager/report/${r.id}`}
-                      className="card flex items-center gap-4 p-3.5 hover:border-accent transition-colors duration-200"
+                      className="card flex items-start gap-4 p-3.5 hover:border-accent transition-colors duration-200"
                     >
                       <div className="flex-1 min-w-0">
+                        <p className="text-xs text-primary text-right">{formatDate(r.report_date)}</p>
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold truncate">{r.projects?.name || "פרויקט"}</span>
                           {r.report_no != null && <span className="text-xs text-primary">#{r.report_no}</span>}
@@ -425,7 +426,6 @@ export default function ManagerDashboard() {
                       </div>
                       <div className="flex flex-col items-end gap-1.5 shrink-0">
                         <TypeChip type="report" />
-                        <span className="text-sm text-primary">{formatDate(r.report_date)}</span>
                       </div>
                     </Link>
                   </li>
@@ -443,9 +443,10 @@ export default function ManagerDashboard() {
                   <li key={`part-${o.id}`}>
                     <Link
                       to="/manager/parts"
-                      className="card flex items-center gap-4 p-3.5 hover:border-accent transition-colors duration-200"
+                      className="card flex items-start gap-4 p-3.5 hover:border-accent transition-colors duration-200"
                     >
                       <div className="flex-1 min-w-0">
+                        <p className="text-xs text-primary text-right">{formatDate(o.created_at)}</p>
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold truncate">{o.projects?.name || "פרויקט"}</span>
                           {o.projects?.clients?.name && (
@@ -457,12 +458,9 @@ export default function ManagerDashboard() {
                           <span>{summary}</span>
                         </p>
                       </div>
-                      <div className="flex flex-col items-end gap-1.5 shrink-0">
-                        <div className="flex items-center gap-1.5">
-                          <TypeChip type="part" />
-                          <StatusBadge status={o.status} labels={PART_STATUS_LABELS} />
-                        </div>
-                        <span className="text-sm text-primary">{formatDate(o.created_at)}</span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <TypeChip type="part" />
+                        <StatusBadge status={o.status} labels={PART_STATUS_LABELS} />
                       </div>
                     </Link>
                   </li>
@@ -474,9 +472,10 @@ export default function ManagerDashboard() {
                 <li key={`exception-${ex.id}`}>
                   <Link
                     to={`/manager/exceptions/${ex.id}`}
-                    className="card flex items-center gap-4 p-3.5 hover:border-accent transition-colors duration-200"
+                    className="card flex items-start gap-4 p-3.5 hover:border-accent transition-colors duration-200"
                   >
                     <div className="flex-1 min-w-0">
+                      <p className="text-xs text-primary text-right">{formatDate(ex.work_date)}</p>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold truncate">{ex.projects?.name || "פרויקט"}</span>
                         {ex.exception_no != null && <span className="text-xs text-primary">#{ex.exception_no}</span>}
@@ -486,12 +485,9 @@ export default function ManagerDashboard() {
                         <span>{Number(ex.billable_days)} ימי חיוב</span>
                       </p>
                     </div>
-                    <div className="flex flex-col items-end gap-1.5 shrink-0">
-                      <div className="flex items-center gap-1.5">
-                        <TypeChip type="exception" />
-                        <StatusBadge status={ex.status} />
-                      </div>
-                      <span className="text-sm text-primary">{formatDate(ex.work_date)}</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <TypeChip type="exception" />
+                      <StatusBadge status={ex.status} />
                     </div>
                   </Link>
                 </li>
