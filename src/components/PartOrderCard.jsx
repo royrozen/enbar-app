@@ -48,7 +48,7 @@ function newLine() {
 // status_updated_by, notes, created_at, projects(name, city, clients(name)),
 // team_leads(name), part_requests(id, quantity, catalog_item_id,
 // other_description, catalog_items(name)).
-export default function PartOrderCard({ order, manager = false, onChanged, onPrint }) {
+export default function PartOrderCard({ order, manager = false, onChanged, onPrint, typeChip }) {
   const [editing, setEditing] = useState(false)
   const [catalogItems, setCatalogItems] = useState(null)
   const [lines, setLines] = useState([])
@@ -190,6 +190,7 @@ export default function PartOrderCard({ order, manager = false, onChanged, onPri
     <li className="card p-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
+          {typeChip && <div className="mb-1">{typeChip}</div>}
           <h3 className="font-bold flex items-center gap-2">
             <PackageIcon size={18} className="text-accent shrink-0" />
             {project.name || 'פרויקט'}
