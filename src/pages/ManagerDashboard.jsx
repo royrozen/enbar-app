@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Header from "../components/Header";
+import StatusBadge from "../components/StatusBadge";
+import TypeChip from "../components/TypeChip";
 import {
   AlertIcon,
   ImageIcon,
@@ -12,7 +14,7 @@ import {
   SearchIcon,
 } from "../components/Icons";
 import { supabase, photoUrls } from "../lib/supabase";
-import { formatDate, todayISO, monthStartISO } from "../lib/format";
+import { formatDate, todayISO, monthStartISO, PART_STATUS_LABELS } from "../lib/format";
 
 const defaultFilters = () => ({
   projectId: "",
@@ -25,8 +27,11 @@ export default function ManagerDashboard() {
   const [projects, setProjects] = useState([]);
   const [leads, setLeads] = useState([]);
   const [filters, setFilters] = useState(defaultFilters);
+  const [typeFilter, setTypeFilter] = useState(""); // '', 'report', 'part', 'exception'
   const [search, setSearch] = useState("");
   const [reports, setReports] = useState(null);
+  const [partOrders, setPartOrders] = useState(null);
+  const [exceptions, setExceptions] = useState(null);
   const [stats, setStats] = useState({
     today: null,
     todayExceptions: null,
@@ -87,28 +92,59 @@ export default function ManagerDashboard() {
     });
   }, []);
 
-  const loadReports = useCallback(async () => {
+  const loadItems = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      let q = supabase
+      let reportsQ = supabase
         .from("reports")
         .select(
           "id, report_no, report_date, workers_count, issues, created_at, projects(name), team_leads(name), report_photos(id, storage_path, sort_order)",
         )
         .order("report_date", { ascending: false })
+        .limit(200);
+      if (filters.projectId) reportsQ = reportsQ.eq("project_id", filters.projectId);
+      if (filters.leadId) reportsQ = reportsQ.eq("team_lead_id", filters.leadId);
+      if (filters.from) reportsQ = reportsQ.gte("report_date", filters.from);
+      if (filters.to) reportsQ = reportsQ.lte("report_date", filters.to);
+
+      let partsQ = supabase
+        .from("part_orders")
+        .select(
+          "id, status, created_at, projects(name, clients(name)), team_leads(name), part_requests(id, quantity, catalog_item_id, other_description, catalog_items(name))",
+        )
         .order("created_at", { ascending: false })
         .limit(200);
-      if (filters.projectId) q = q.eq("project_id", filters.projectId);
-      if (filters.leadId) q = q.eq("team_lead_id", filters.leadId);
-      if (filters.from) q = q.gte("report_date", filters.from);
-      if (filters.to) q = q.lte("report_date", filters.to);
-      const { data, error: err } = await q;
-      if (err) throw err;
-      setReports(data || []);
+      if (filters.projectId) partsQ = partsQ.eq("project_id", filters.projectId);
+      if (filters.leadId) partsQ = partsQ.eq("team_lead_id", filters.leadId);
+      if (filters.from) partsQ = partsQ.gte("created_at", filters.from);
+      if (filters.to) partsQ = partsQ.lte("created_at", `${filters.to}T23:59:59`);
+
+      let excQ = supabase
+        .from("exception_logs")
+        .select(
+          "id, exception_no, billable_days, status, work_date, projects(name, clients(name)), team_leads(name)",
+        )
+        .order("work_date", { ascending: false })
+        .limit(200);
+      if (filters.projectId) excQ = excQ.eq("project_id", filters.projectId);
+      if (filters.leadId) excQ = excQ.eq("team_lead_id", filters.leadId);
+      if (filters.from) excQ = excQ.gte("work_date", filters.from);
+      if (filters.to) excQ = excQ.lte("work_date", filters.to);
+
+      const [{ data: rpts, error: rErr }, { data: orders, error: pErr }, { data: excs, error: eErr }] =
+        await Promise.all([reportsQ, partsQ, excQ]);
+      if (rErr) throw rErr;
+      if (pErr) throw pErr;
+      if (eErr) throw eErr;
+      setReports(rpts || []);
+      setPartOrders(orders || []);
+      setExceptions(excs || []);
     } catch {
       setError("טעינת הדוחות נכשלה — נסו לרענן");
       setReports([]);
+      setPartOrders([]);
+      setExceptions([]);
     } finally {
       setLoading(false);
     }
@@ -119,8 +155,8 @@ export default function ManagerDashboard() {
   }, [loadMeta]);
 
   useEffect(() => {
-    loadReports();
-  }, [loadReports]);
+    loadItems();
+  }, [loadItems]);
 
   useEffect(() => {
     if (!reports?.length) return;
@@ -137,7 +173,7 @@ export default function ManagerDashboard() {
 
   function refresh() {
     loadMeta();
-    loadReports();
+    loadItems();
   }
 
   function firstThumbPath(r) {
@@ -147,13 +183,28 @@ export default function ManagerDashboard() {
     return sorted[0]?.storage_path || null;
   }
 
+  const items = reports === null ? null : [
+    ...(reports || []).map((r) => ({ type: "report", ts: r.report_date, record: r })),
+    ...(partOrders || []).map((o) => ({ type: "part", ts: o.created_at, record: o })),
+    ...(exceptions || []).map((e) => ({ type: "exception", ts: e.work_date, record: e })),
+  ].sort((a, b) => new Date(b.ts) - new Date(a.ts));
+
+  const typeFilteredItems = !items ? null : typeFilter ? items.filter((i) => i.type === typeFilter) : items;
+
   const q = search.trim();
-  const visibleReports = !q
-    ? reports
-    : (reports || []).filter((r) => {
-        const haystack = `${r.projects?.name || ""} ${r.team_leads?.name || ""} ${formatDate(r.report_date)} ${r.report_no ?? ""} #${r.report_no ?? ""}`;
-        return haystack.includes(q);
-      });
+  const visibleItems = !typeFilteredItems
+    ? null
+    : !q
+      ? typeFilteredItems
+      : typeFilteredItems.filter((i) => {
+          const r = i.record;
+          const project = r.projects?.name || "";
+          const client = r.projects?.clients?.name || "";
+          const lead = r.team_leads?.name || "";
+          const no = i.type === "report" ? r.report_no : i.type === "exception" ? r.exception_no : "";
+          const haystack = `${project} ${client} ${lead} #${no ?? ""} ${no ?? ""}`;
+          return haystack.includes(q);
+        });
 
   return (
     <div className="min-h-dvh manager-desktop">
@@ -173,7 +224,14 @@ export default function ManagerDashboard() {
 
         {/* Status row */}
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <div className="card p-4 flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => setTypeFilter((t) => (t === "report" ? "" : "report"))}
+            aria-pressed={typeFilter === "report"}
+            className={`card p-4 flex items-center gap-4 text-start transition-colors duration-200 ${
+              typeFilter === "report" ? "border-accent ring-2 ring-accent/30" : "hover:border-accent"
+            }`}
+          >
             <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-white">
               <ClipboardIcon size={24} />
             </span>
@@ -183,7 +241,7 @@ export default function ManagerDashboard() {
               </p>
               <p className="text-sm text-primary mt-1">דוחות היום</p>
             </div>
-          </div>
+          </button>
           <Link
             to="/manager/parts"
             className="card p-4 flex items-center gap-4 hover:border-accent transition-colors duration-200"
@@ -316,12 +374,12 @@ export default function ManagerDashboard() {
           />
         </div>
 
-        {/* Reports list */}
-        {reports === null ? (
+        {/* Merged reports / parts / exceptions list */}
+        {visibleItems === null ? (
           <div className="flex justify-center py-12 text-primary">
             <SpinnerIcon size={32} />
           </div>
-        ) : visibleReports.length === 0 ? (
+        ) : visibleItems.length === 0 ? (
           <div className="card p-10 mt-4 text-center text-primary">
             <ClipboardIcon size={40} className="mx-auto mb-3 opacity-60" />
             <p className="font-bold text-foreground">לא נמצאו דוחות</p>
@@ -333,62 +391,107 @@ export default function ManagerDashboard() {
           </div>
         ) : (
           <ul className="mt-4 flex flex-col gap-3">
-            {visibleReports.map((r) => {
-              const thumb = thumbUrls[firstThumbPath(r)];
+            {visibleItems.map((item) => {
+              if (item.type === "report") {
+                const r = item.record;
+                return (
+                  <li key={`report-${r.id}`}>
+                    <Link
+                      to={`/manager/report/${r.id}`}
+                      className="card flex items-center gap-4 p-3.5 hover:border-accent transition-colors duration-200"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold truncate">{r.projects?.name || "פרויקט"}</span>
+                          {r.report_no != null && <span className="text-xs text-primary">#{r.report_no}</span>}
+                        </div>
+                        <p className="text-sm text-primary mt-1 flex items-center gap-3 flex-wrap">
+                          <span>{r.team_leads?.name}</span>
+                          <span className="inline-flex items-center gap-1">
+                            <UsersIcon size={15} />
+                            {r.workers_count}
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <ImageIcon size={15} />
+                            {r.report_photos?.length || 0}
+                          </span>
+                          {r.issues && (
+                            <span className="text-destructive inline-flex items-center gap-1 font-bold" title="דווחה בעיה באתר">
+                              <AlertIcon size={15} />
+                              בעיה
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1.5 shrink-0">
+                        <TypeChip type="report" />
+                        <span className="text-sm text-primary">{formatDate(r.report_date)}</span>
+                      </div>
+                    </Link>
+                  </li>
+                );
+              }
+
+              if (item.type === "part") {
+                const o = item.record;
+                const lines = o.part_requests || [];
+                const summary =
+                  lines.length === 1
+                    ? lines[0].catalog_items?.name || lines[0].other_description
+                    : `${lines.length} פריטים`;
+                return (
+                  <li key={`part-${o.id}`}>
+                    <Link
+                      to="/manager/parts"
+                      className="card flex items-center gap-4 p-3.5 hover:border-accent transition-colors duration-200"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold truncate">{o.projects?.name || "פרויקט"}</span>
+                          {o.projects?.clients?.name && (
+                            <span className="text-xs text-primary">· {o.projects.clients.name}</span>
+                          )}
+                        </div>
+                        <p className="text-sm text-primary mt-1 flex items-center gap-3 flex-wrap">
+                          <span>{o.team_leads?.name}</span>
+                          <span>{summary}</span>
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1.5 shrink-0">
+                        <div className="flex items-center gap-1.5">
+                          <TypeChip type="part" />
+                          <StatusBadge status={o.status} labels={PART_STATUS_LABELS} />
+                        </div>
+                        <span className="text-sm text-primary">{formatDate(o.created_at)}</span>
+                      </div>
+                    </Link>
+                  </li>
+                );
+              }
+
+              const ex = item.record;
               return (
-                <li key={r.id}>
+                <li key={`exception-${ex.id}`}>
                   <Link
-                    to={`/manager/report/${r.id}`}
+                    to={`/manager/exceptions/${ex.id}`}
                     className="card flex items-center gap-4 p-3.5 hover:border-accent transition-colors duration-200"
                   >
-                    <div className="h-16 w-16 shrink-0 rounded-xl overflow-hidden bg-muted border border-border flex items-center justify-center text-primary">
-                      {thumb ? (
-                        <img
-                          src={thumb}
-                          alt=""
-                          loading="lazy"
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <ImageIcon size={24} className="opacity-50" />
-                      )}
-                    </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold truncate">
-                          {r.projects?.name || "פרויקט"}
-                        </span>
-                        {r.report_no != null && (
-                          <span className="text-xs text-primary">
-                            #{r.report_no}
-                          </span>
-                        )}
-                        <span className="text-sm text-primary">
-                          {formatDate(r.report_date)}
-                        </span>
+                        <span className="font-bold truncate">{ex.projects?.name || "פרויקט"}</span>
+                        {ex.exception_no != null && <span className="text-xs text-primary">#{ex.exception_no}</span>}
                       </div>
                       <p className="text-sm text-primary mt-1 flex items-center gap-3 flex-wrap">
-                        <span>{r.team_leads?.name}</span>
-                        <span className="inline-flex items-center gap-1">
-                          <UsersIcon size={15} />
-                          {r.workers_count}
-                        </span>
-                        <span className="inline-flex items-center gap-1">
-                          <ImageIcon size={15} />
-                          {r.report_photos?.length || 0}
-                        </span>
+                        <span>{ex.team_leads?.name}</span>
+                        <span>{Number(ex.billable_days)} ימי חיוב</span>
                       </p>
                     </div>
-                    <div className="flex flex-col items-end gap-2 shrink-0">
-                      {r.issues && (
-                        <span
-                          className="text-destructive inline-flex items-center gap-1 text-xs font-bold"
-                          title="דווחה בעיה באתר"
-                        >
-                          <AlertIcon size={16} />
-                          בעיה
-                        </span>
-                      )}
+                    <div className="flex flex-col items-end gap-1.5 shrink-0">
+                      <div className="flex items-center gap-1.5">
+                        <TypeChip type="exception" />
+                        <StatusBadge status={ex.status} />
+                      </div>
+                      <span className="text-sm text-primary">{formatDate(ex.work_date)}</span>
                     </div>
                   </Link>
                 </li>
