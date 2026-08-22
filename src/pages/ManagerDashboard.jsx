@@ -12,12 +12,12 @@ import {
   SearchIcon,
 } from "../components/Icons";
 import { supabase, photoUrls } from "../lib/supabase";
-import { formatDate, todayISO, daysAgoISO } from "../lib/format";
+import { formatDate, todayISO, monthStartISO } from "../lib/format";
 
 const defaultFilters = () => ({
   projectId: "",
   leadId: "",
-  from: daysAgoISO(6), // default: last 7 days
+  from: monthStartISO(), // default: from the start of the current month
   to: todayISO(),
 });
 

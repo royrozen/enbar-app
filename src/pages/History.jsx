@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom'
 import Header from '../components/Header'
 import StatusBadge from '../components/StatusBadge'
 import StatusChips from '../components/StatusChips'
+import TypeChip from '../components/TypeChip'
 import PartOrderCard from '../components/PartOrderCard'
 import { ImageIcon, AlertIcon, SpinnerIcon, ClipboardIcon } from '../components/Icons'
 import { supabase } from '../lib/supabase'
-import { formatDate, todayISO, daysAgoISO } from '../lib/format'
+import { formatDate, todayISO, monthStartISO } from '../lib/format'
 import { useAuth } from '../lib/AuthContext'
 
 const TYPE_CHIPS = [
@@ -18,8 +19,9 @@ const TYPE_CHIPS = [
 
 const defaultFilters = () => ({
   type: '',
+  clientId: '',
   projectId: '',
-  from: daysAgoISO(29), // default: last 30 days
+  from: monthStartISO(), // default: from the start of the current month
   to: todayISO(),
 })
 
@@ -30,24 +32,34 @@ export default function History() {
   const { profile, viewAsTeamLead } = useAuth()
   const effectiveTeamLeadId = viewAsTeamLead?.id || profile?.team_lead_id
   const [lead, setLead] = useState(null)
-  const [projects, setProjects] = useState([])
+  const [clients, setClients] = useState([])
   const [filters, setFilters] = useState(defaultFilters)
   const [reports, setReports] = useState(null)
   const [partOrders, setPartOrders] = useState(null)
   const [exceptions, setExceptions] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [reportNoSearch, setReportNoSearch] = useState('')
+  const [search, setSearch] = useState('')
 
   const loadMeta = useCallback(async () => {
-    const [{ data: activeLead }, { data: projs }] = await Promise.all([
+    const [{ data: activeLead }, { data: cls }] = await Promise.all([
       effectiveTeamLeadId
         ? supabase.from('team_leads').select('id, name').eq('id', effectiveTeamLeadId).single()
         : Promise.resolve({ data: null }),
-      supabase.from('projects').select('id, name').is('deleted_at', null).order('name'),
+      // Includes inactive clients/projects, not just deleted-filtered — same
+      // "show full history regardless of active status" precedent the plain
+      // project filter already used.
+      supabase
+        .from('clients')
+        .select('id, name, projects(id, name, deleted_at)')
+        .is('deleted_at', null)
+        .order('name')
+        .order('name', { foreignTable: 'projects' }),
     ])
     setLead(activeLead)
-    setProjects(projs || [])
+    setClients(
+      (cls || []).map((c) => ({ ...c, projects: (c.projects || []).filter((p) => !p.deleted_at) })),
+    )
     return activeLead
   }, [effectiveTeamLeadId])
 
@@ -56,14 +68,28 @@ export default function History() {
     setLoading(true)
     setError('')
     try {
+      // No specific project chosen but a client is: narrow to that client's
+      // project ids client-side (already have them from loadMeta) rather
+      // than joining clients into every query.
+      const clientProjectIds = filters.clientId
+        ? (clients.find((c) => c.id === filters.clientId)?.projects || []).map((p) => p.id)
+        : null
+      if (clientProjectIds && clientProjectIds.length === 0) {
+        setReports([])
+        setPartOrders([])
+        setExceptions([])
+        return
+      }
+
       let reportsQ = supabase
         .from('reports')
-        .select('id, report_no, report_date, workers_count, issues, created_at, projects(name)')
+        .select('id, report_no, report_date, workers_count, issues, created_at, projects(name, clients(name))')
         .eq('team_lead_id', activeLead.id)
         .order('report_date', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(200)
       if (filters.projectId) reportsQ = reportsQ.eq('project_id', filters.projectId)
+      else if (clientProjectIds) reportsQ = reportsQ.in('project_id', clientProjectIds)
       if (filters.from) reportsQ = reportsQ.gte('report_date', filters.from)
       if (filters.to) reportsQ = reportsQ.lte('report_date', filters.to)
 
@@ -74,16 +100,18 @@ export default function History() {
         .order('created_at', { ascending: false })
         .limit(200)
       if (filters.projectId) partsQ = partsQ.eq('project_id', filters.projectId)
+      else if (clientProjectIds) partsQ = partsQ.in('project_id', clientProjectIds)
       if (filters.from) partsQ = partsQ.gte('created_at', filters.from)
       if (filters.to) partsQ = partsQ.lte('created_at', `${filters.to}T23:59:59`)
 
       let excQ = supabase
         .from('exception_logs')
-        .select('id, billable_days, days_overridden, status, created_at, projects(name)')
+        .select('id, billable_days, days_overridden, status, created_at, projects(name, clients(name))')
         .eq('team_lead_id', activeLead.id)
         .order('created_at', { ascending: false })
         .limit(200)
       if (filters.projectId) excQ = excQ.eq('project_id', filters.projectId)
+      else if (clientProjectIds) excQ = excQ.in('project_id', clientProjectIds)
       if (filters.from) excQ = excQ.gte('created_at', filters.from)
       if (filters.to) excQ = excQ.lte('created_at', `${filters.to}T23:59:59`)
 
@@ -103,7 +131,7 @@ export default function History() {
     } finally {
       setLoading(false)
     }
-  }, [filters])
+  }, [filters, clients])
 
   useEffect(() => {
     let cancelled = false
@@ -128,10 +156,16 @@ export default function History() {
     (a, b) => new Date(b.ts) - new Date(a.ts),
   )
   const typeFiltered = filters.type ? unified.filter((u) => u.type === filters.type) : unified
-  const q = reportNoSearch.trim()
+  const q = search.trim().toLowerCase()
   const visible = !q
     ? typeFiltered
-    : typeFiltered.filter((u) => u.type === 'report' && String(u.report.report_no ?? '').includes(q))
+    : typeFiltered.filter((u) => {
+        const record = u.type === 'report' ? u.report : u.type === 'exception' ? u.exception : u.order
+        const projectName = record.projects?.name || ''
+        const clientName = record.projects?.clients?.name || ''
+        const reportNo = u.type === 'report' ? String(record.report_no ?? '') : ''
+        return [projectName, clientName, reportNo].some((v) => v.toLowerCase().includes(q))
+      })
 
   return (
     <div className="min-h-dvh">
@@ -149,6 +183,20 @@ export default function History() {
 
         <div className="card p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
           <div className="sm:col-span-2">
+            <label className="label !text-xs" htmlFor="f-client">לקוח</label>
+            <select
+              id="f-client"
+              className="input !min-h-[48px]"
+              value={filters.clientId}
+              onChange={(e) => setFilters((f) => ({ ...f, clientId: e.target.value, projectId: '' }))}
+            >
+              <option value="">כל הלקוחות</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="sm:col-span-2">
             <label className="label !text-xs" htmlFor="f-project">פרויקט</label>
             <select
               id="f-project"
@@ -157,7 +205,10 @@ export default function History() {
               onChange={(e) => setFilters((f) => ({ ...f, projectId: e.target.value }))}
             >
               <option value="">כל הפרויקטים</option>
-              {projects.map((p) => (
+              {(filters.clientId
+                ? clients.find((c) => c.id === filters.clientId)?.projects || []
+                : clients.flatMap((c) => c.projects).sort((a, b) => a.name.localeCompare(b.name, 'he'))
+              ).map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
@@ -183,15 +234,14 @@ export default function History() {
             />
           </div>
           <div className="sm:col-span-2 min-w-0">
-            <label className="label !text-xs" htmlFor="f-report-no">חיפוש לפי מספר דוח</label>
+            <label className="label !text-xs" htmlFor="f-search">חיפוש לפי פרויקט, לקוח או מספר דוח</label>
             <input
-              id="f-report-no"
+              id="f-search"
               type="text"
-              inputMode="numeric"
               className="input !min-h-[48px] w-full min-w-0"
-              placeholder="לדוגמה: 245"
-              value={reportNoSearch}
-              onChange={(e) => setReportNoSearch(e.target.value)}
+              placeholder="לדוגמה: אפל הרצליה, אלקטרה, 245"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
             />
           </div>
         </div>
@@ -231,6 +281,7 @@ export default function History() {
                         <span className="text-sm font-black">{formatDate(r.report_date)}</span>
                       </div>
                       <div className="flex-1 min-w-0">
+                        <TypeChip type="report" className="mb-1" />
                         <p className="font-bold truncate">
                           {r.projects?.name || 'פרויקט'}
                           {r.report_no != null && (
@@ -265,6 +316,7 @@ export default function History() {
                         <span className="text-sm font-black">{formatDate(ex.created_at)}</span>
                       </div>
                       <div className="flex-1 min-w-0">
+                        <TypeChip type="exception" className="mb-1" />
                         <p className="font-bold truncate">{ex.projects?.name || 'פרויקט'}</p>
                         <p className="text-sm text-primary mt-0.5">
                           אישורי עבודה נוספת · {d} ימי חיוב
@@ -281,6 +333,7 @@ export default function History() {
                   key={`part-${item.order.id}`}
                   order={item.order}
                   onChanged={() => loadData(lead)}
+                  typeChip={<TypeChip type="part" />}
                 />
               )
             })}

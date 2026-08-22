@@ -43,6 +43,12 @@ export function daysAgoISO(n) {
   return toISO(d)
 }
 
+export function monthStartISO() {
+  const d = new Date()
+  d.setDate(1)
+  return toISO(d)
+}
+
 // True when an ISO date or timestamp falls on the browser's local "today" —
 // used to gate edit access (D2: created_at-based, not report_date).
 export function isToday(isoDateOrTimestamp) {
