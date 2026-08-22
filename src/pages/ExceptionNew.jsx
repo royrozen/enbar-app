@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Header from '../components/Header'
 import PhotoUploader from '../components/PhotoUploader'
+import DateField from '../components/DateField'
 import {
   PlusIcon,
   MinusIcon,
@@ -11,7 +12,7 @@ import {
   PencilIcon,
 } from '../components/Icons'
 import { supabase, EXCEPTION_PHOTO_BUCKET } from '../lib/supabase'
-import { MAX_EXCEPTION_DESCRIPTION_LENGTH } from '../lib/format'
+import { MAX_EXCEPTION_DESCRIPTION_LENGTH, todayISO } from '../lib/format'
 import { useAuth } from '../lib/AuthContext'
 
 const DRAFT_KEY = 'enbar_exception_draft'
@@ -48,6 +49,7 @@ export default function ExceptionNew() {
 
   const [clientId, setClientId] = useState(draft.clientId || '')
   const [projectId, setProjectId] = useState(draft.projectId || '')
+  const [date, setDate] = useState(draft.date && draft.date <= todayISO() ? draft.date : todayISO())
   const [workers, setWorkers] = useState(draft.workers || 1)
   const [workDays, setWorkDays] = useState(draft.workDays || 1)
   const [desc, setDesc] = useState(draft.desc || '')
@@ -60,6 +62,7 @@ export default function ExceptionNew() {
   const [progress, setProgress] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [done, setDone] = useState(null)
+  const [markedDates, setMarkedDates] = useState(new Set())
 
   const billableDays = daysOverridden ? manualDays : autoBillableDays(workers, workDays)
 
@@ -70,7 +73,7 @@ export default function ExceptionNew() {
         const [{ data: cls, error: cErr }, { data: activeLead }] = await Promise.all([
           supabase
             .from('clients')
-            .select('id, name, projects(id, name, city, is_active, deleted_at)')
+            .select('id, name, projects(id, name, city, is_active, deleted_at, created_at)')
             .eq('is_active', true)
             .is('deleted_at', null)
             .order('name'),
@@ -103,6 +106,8 @@ export default function ExceptionNew() {
 
   const selectedClient = (clients || []).find((c) => c.id === clientId) || null
   const clientProjects = selectedClient?.projects || []
+  const selectedProject = clientProjects.find((p) => p.id === projectId) || null
+  const minDate = selectedProject?.created_at?.slice(0, 10) || undefined
 
   useEffect(() => {
     if (clientProjects.length === 1) {
@@ -113,14 +118,34 @@ export default function ExceptionNew() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId, clients])
 
+  // "Already logged" indicator (enbar-backdated-reports-prd.md §3c/D4) — one
+  // lightweight query per project selection, no per-day-cell query.
+  useEffect(() => {
+    let cancelled = false
+    if (!projectId) {
+      setMarkedDates(new Set())
+      return
+    }
+    supabase
+      .from('exception_logs')
+      .select('work_date')
+      .eq('project_id', projectId)
+      .then(({ data }) => {
+        if (!cancelled) setMarkedDates(new Set((data || []).map((r) => r.work_date)))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [projectId])
+
   // Draft auto-save (text only, not photos)
   useEffect(() => {
     if (done) return
     localStorage.setItem(
       DRAFT_KEY,
-      JSON.stringify({ clientId, projectId, workers, workDays, desc, daysOverridden, manualDays }),
+      JSON.stringify({ clientId, projectId, date, workers, workDays, desc, daysOverridden, manualDays }),
     )
-  }, [clientId, projectId, workers, workDays, desc, daysOverridden, manualDays, done])
+  }, [clientId, projectId, date, workers, workDays, desc, daysOverridden, manualDays, done])
 
   function stepWorkers(delta) {
     const w = Number(workers) || 0
@@ -147,6 +172,9 @@ export default function ExceptionNew() {
     if (!clientId) errs.client = 'יש לבחור לקוח'
     else if (clientProjects.length === 0) errs.client = 'ללקוח זה אין פרויקט פעיל — פנו למנהל המפעל'
     else if (clientProjects.length > 1 && !projectId) errs.project = 'יש לבחור פרויקט עבור לקוח זה'
+    if (!date) errs.date = 'יש לבחור תאריך'
+    else if (date > todayISO()) errs.date = 'לא ניתן לדווח על תאריך עתידי'
+    else if (minDate && date < minDate) errs.date = 'לא ניתן לדווח על תאריך שלפני תחילת הפרויקט'
     const w = Number(workers)
     if (!Number.isInteger(w) || w < 1 || w > 50) errs.workers = 'מספר העובדים חייב להיות בין 1 ל־50'
     const d = Number(workDays)
@@ -183,6 +211,7 @@ export default function ExceptionNew() {
         .insert({
           team_lead_id: lead.id,
           project_id: projectId,
+          work_date: date,
           workers_count: Number(workers),
           work_days: Number(workDays),
           work_description: desc.trim(),
@@ -319,7 +348,23 @@ export default function ExceptionNew() {
             </div>
           )}
 
-          {/* 2. Workers */}
+          {/* 2. Date — appears once a project is resolved (client → project → date) */}
+          {projectId && (
+            <DateField
+              id="date"
+              label="תאריך"
+              required
+              value={date}
+              onChange={setDate}
+              min={minDate}
+              max={todayISO()}
+              markedDates={markedDates}
+              error={errors.date}
+              disabled={submitting}
+            />
+          )}
+
+          {/* 3. Workers */}
           <div data-error={!!errors.workers}>
             <span className="label">
               מספר עובדים <span className="text-destructive">*</span>
@@ -359,7 +404,7 @@ export default function ExceptionNew() {
             {errors.workers && <p className="err">{errors.workers}</p>}
           </div>
 
-          {/* 3. Work duration */}
+          {/* 4. Work duration */}
           <div data-error={!!errors.workDays}>
             <span className="label">
               משך העבודה (ימים) <span className="text-destructive">*</span>
@@ -400,7 +445,7 @@ export default function ExceptionNew() {
             {errors.workDays && <p className="err">{errors.workDays}</p>}
           </div>
 
-          {/* 4. Description */}
+          {/* 5. Description */}
           <div data-error={!!errors.desc}>
             <label htmlFor="desc" className="label">
               תיאור העבודה הנדרשת <span className="text-destructive">*</span>
@@ -422,7 +467,7 @@ export default function ExceptionNew() {
             {errors.desc && <p className="err">{errors.desc}</p>}
           </div>
 
-          {/* 5. Billable days (calculated) */}
+          {/* 6. Billable days (calculated) */}
           <div data-error={!!errors.days} className="card p-4 border-accent/40">
             <div className="flex items-center justify-between gap-3">
               <span className="label !mb-0">
@@ -477,7 +522,7 @@ export default function ExceptionNew() {
             {errors.days && <p className="err">{errors.days}</p>}
           </div>
 
-          {/* 6. Photos */}
+          {/* 7. Photos */}
           <PhotoUploader
             label="תמונות מהשטח"
             hint={`עד ${MAX_PHOTOS} תמונות — נדחסות אוטומטית`}
