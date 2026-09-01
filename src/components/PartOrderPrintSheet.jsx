@@ -12,7 +12,7 @@ export default function PartOrderPrintSheet({ order, onClose }) {
   const lines = order.part_requests || []
 
   return (
-    <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+    <div className="print-modal fixed inset-0 z-50 bg-white overflow-y-auto">
       <div className="no-print sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-border">
         <div className="mx-auto max-w-3xl px-4 h-16 flex items-center justify-between gap-2">
           <button onClick={onClose} className="btn btn-ghost !px-2" aria-label="סגירה">
@@ -86,8 +86,8 @@ export default function PartOrderPrintSheet({ order, onClose }) {
         <div className="mt-16 grid grid-cols-2 gap-12">
           <div className="border-b border-gray-500 pb-1.5 h-9" />
           <div className="border-b border-gray-500 pb-1.5 h-9" />
-          <p className="text-sm text-gray-600">שם העובד שהכין את ההזמנה</p>
-          <p className="text-sm text-gray-600">תאריך השלמת ההזמנה</p>
+          <p className="text-sm text-gray-600">שם העובד</p>
+          <p className="text-sm text-gray-600">תאריך</p>
         </div>
       </div>
     </div>

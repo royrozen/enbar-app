@@ -198,9 +198,13 @@ body {
   .print-sheet * {
     visibility: visible;
   }
+  .print-modal {
+    position: static;
+    overflow: visible;
+    height: auto;
+  }
   .print-sheet {
-    position: absolute;
-    inset: 0;
+    position: static;
     width: 100%;
   }
   .no-print {
