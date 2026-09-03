@@ -26,6 +26,10 @@ export const MinusIcon = (p) => (
   <Icon {...p}><path d="M5 12h14" /></Icon>
 )
 
+export const MenuIcon = (p) => (
+  <Icon {...p}><path d="M4 6h16M4 12h16M4 18h16" /></Icon>
+)
+
 export const CameraIcon = (p) => (
   <Icon {...p}>
     <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
