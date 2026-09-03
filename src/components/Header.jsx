@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import Logo from './Logo'
-import { BackIcon } from './Icons'
+import { BackIcon, MenuIcon } from './Icons'
 import { PROFILES } from '../lib/profile'
 import { useAuth } from '../lib/AuthContext'
 import { signOut } from '../lib/auth'
@@ -45,7 +45,7 @@ export default function Header({ backTo, title }) {
 
   return (
     <header className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-border">
-      <div className="mx-auto max-w-5xl px-4 h-16 flex items-center justify-between gap-2">
+      <div className="mx-auto max-w-5xl px-4 h-16 flex items-center gap-2">
         <div className="flex items-center gap-1.5 min-w-0">
           {backTo && (
             <button
@@ -82,7 +82,7 @@ export default function Header({ backTo, title }) {
             </details>
           )}
           {isManager && !viewAsTeamLead && (
-            <nav className="flex items-center gap-1 me-1">
+            <nav className="hidden sm:flex items-center gap-1 me-1">
               <NavLink
                 to="/manager"
                 end
@@ -109,6 +109,46 @@ export default function Header({ backTo, title }) {
                 ניהול
               </NavLink>
             </nav>
+          )}
+          {isManager && !viewAsTeamLead && (
+            <details className="relative sm:hidden">
+              <summary
+                aria-label="ניווט"
+                className="btn btn-ghost !px-2 cursor-pointer list-none select-none"
+              >
+                <MenuIcon size={22} />
+              </summary>
+              <div className="absolute start-0 mt-2 w-44 rounded-xl border border-border bg-white shadow-lg py-1 z-30">
+                <NavLink
+                  to="/manager"
+                  end
+                  onClick={(e) => e.currentTarget.closest('details')?.removeAttribute('open')}
+                  className={({ isActive }) =>
+                    `block px-3 py-2 text-sm hover:bg-muted ${isActive ? 'text-accent font-black' : ''}`
+                  }
+                >
+                  דוחות
+                </NavLink>
+                <NavLink
+                  to="/manager/my-reports"
+                  onClick={(e) => e.currentTarget.closest('details')?.removeAttribute('open')}
+                  className={({ isActive }) =>
+                    `block px-3 py-2 text-sm hover:bg-muted ${isActive ? 'text-accent font-black' : ''}`
+                  }
+                >
+                  הדוחות שלי
+                </NavLink>
+                <NavLink
+                  to="/manager/settings"
+                  onClick={(e) => e.currentTarget.closest('details')?.removeAttribute('open')}
+                  className={({ isActive }) =>
+                    `block px-3 py-2 text-sm hover:bg-muted ${isActive ? 'text-accent font-black' : ''}`
+                  }
+                >
+                  ניהול
+                </NavLink>
+              </div>
+            </details>
           )}
           {role && !viewAsTeamLead && isManager && (
             <details className="relative">
