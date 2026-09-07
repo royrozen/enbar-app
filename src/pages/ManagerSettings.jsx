@@ -1884,6 +1884,7 @@ function MonthlyReportSection() {
 const LUNCH_SUB_TABS = [
   { key: "roster", label: "עובדים" },
   { key: "orders", label: "הזמנות צהריים" },
+  { key: "report", label: "דוח ארוחות חודשי" },
 ];
 
 function LunchTab() {
@@ -1916,9 +1917,9 @@ function LunchTab() {
           </div>
           <LunchCutoffSection />
           <TodayOrders />
-          <MonthlyReportSection />
         </div>
       )}
+      {subTab === "report" && <MonthlyReportSection />}
     </div>
   );
 }
