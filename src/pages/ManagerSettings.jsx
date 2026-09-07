@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import Header from "../components/Header";
 import {
-  ClipboardIcon,
   UsersIcon,
   HardHatIcon,
   PlusIcon,
@@ -14,6 +13,7 @@ import {
   TrashIcon,
   ChevronDownIcon,
   RefreshIcon,
+  DownloadIcon,
 } from "../components/Icons";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/AuthContext";
@@ -23,6 +23,7 @@ import {
   fetchLunchSettings,
   updateLunchSettings,
   fetchTodayOrders,
+  fetchMonthlyCounts,
 } from "../lib/lunch";
 import { formatDate, todayISO } from "../lib/format";
 
@@ -1786,31 +1787,134 @@ function TodayOrders() {
   );
 }
 
-function LunchTab() {
+function MonthlyReportSection() {
+  function currentMonthValue() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  function toCsv(rows) {
+    const header = "עובד,טלפון,ימי הזמנה";
+    const lines = rows.map((r) => `"${r.name.replace(/"/g, '""')}",${r.phone},${r.count}`);
+    return "﻿" + [header, ...lines].join("\n"); // BOM so Excel opens Hebrew correctly
+  }
+
+  const [month, setMonth] = useState(currentMonthValue);
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function load() {
+    const [year, m] = month.split("-").map(Number);
+    setLoading(true);
+    setError("");
+    try {
+      setRows(await fetchMonthlyCounts(year, m));
+    } catch {
+      setError("הטעינה נכשלה — נסו לרענן");
+    }
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [month]);
+
+  function exportCsv() {
+    const blob = new Blob([toCsv(rows || [])], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `lunch-report-${month}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
-    <div className="flex flex-col gap-6">
-      <LunchCutoffSection />
-      <TodayOrders />
-      <div>
-        <h3 className="font-bold mb-3">עובדים</h3>
-        <Link
-          to="/manager/lunch-report"
-          className="card p-4 flex items-center gap-4 hover:border-accent transition-colors duration-200 mb-4"
-        >
-          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-white">
-            <ClipboardIcon size={24} />
-          </span>
-          <div>
-            <p className="text-sm font-bold leading-tight">דוח ארוחות חודשי</p>
-            <p className="text-sm text-primary mt-1">מעבר לדוח הצהריים</p>
-          </div>
-        </Link>
-        <LunchEmployeesSection />
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h3 className="font-bold">דוח ארוחות חודשי</h3>
+        <button className="btn btn-ghost text-sm" onClick={load} disabled={loading}>
+          <RefreshIcon size={18} className={loading ? "spin" : ""} />
+          רענון
+        </button>
       </div>
-      <div>
-        <h3 className="font-bold mb-3">תפריט</h3>
-        <LunchMenuSection />
+
+      <div className="card p-4 flex items-center gap-3 flex-wrap">
+        <div>
+          <label className="label !text-xs" htmlFor="lunch-month">חודש</label>
+          <input
+            id="lunch-month"
+            type="month"
+            className="input"
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+          />
+        </div>
+        <button className="btn btn-outline self-end" onClick={exportCsv} disabled={!rows?.length}>
+          <DownloadIcon size={18} />
+          ייצוא ל-CSV
+        </button>
       </div>
+
+      {error && <p className="err">{error}</p>}
+
+      <ul className="flex flex-col gap-2">
+        {(rows || []).map((r) => (
+          <li key={r.employeeId} className="card p-4 flex items-center justify-between gap-3">
+            <div>
+              <p className="font-bold">{r.name}</p>
+              <p className="text-xs text-primary" dir="ltr">{r.phone}</p>
+            </div>
+            <p className="text-lg font-black text-accent">{r.count}</p>
+          </li>
+        ))}
+        {rows?.length === 0 && (
+          <li className="card p-6 text-center text-primary">אין הזמנות בחודש זה</li>
+        )}
+        {rows === null && (
+          <li className="flex justify-center py-8 text-primary"><SpinnerIcon size={28} /></li>
+        )}
+      </ul>
+    </div>
+  );
+}
+
+const LUNCH_SUB_TABS = [
+  { key: "roster", label: "עובדים" },
+  { key: "menu", label: "תפריט" },
+  { key: "cutoff", label: "נעילת הזמנות" },
+  { key: "today", label: "הזמנות היום" },
+  { key: "report", label: "דוח חודשי" },
+];
+
+function LunchTab() {
+  const [subTab, setSubTab] = useState("roster");
+
+  return (
+    <div>
+      <div className="flex gap-1 flex-wrap mb-4">
+        {LUNCH_SUB_TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setSubTab(key)}
+            className={`px-3 py-2 rounded-full text-sm font-bold transition-colors duration-200 ${
+              subTab === key
+                ? "bg-accent text-white"
+                : "bg-muted text-primary hover:text-foreground"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {subTab === "roster" && <LunchEmployeesSection />}
+      {subTab === "menu" && <LunchMenuSection />}
+      {subTab === "cutoff" && <LunchCutoffSection />}
+      {subTab === "today" && <TodayOrders />}
+      {subTab === "report" && <MonthlyReportSection />}
     </div>
   );
 }
