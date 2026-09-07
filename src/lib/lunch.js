@@ -66,6 +66,36 @@ export async function getLastOrder(employeeId) {
   return data?.[0] || null
 }
 
+// factory_manager-only (RLS) — every order for today, one row per employee
+// with their actual selections. Unlike fetchTodaySheet() (the public RPC
+// behind /lunch/today), this reads lunch_orders directly since managers
+// already have full SELECT on it, and isn't gated by the cutoff — a manager
+// can check who's ordered so far at any time of day.
+export async function fetchTodayOrders() {
+  const { data, error } = await supabase
+    .from('lunch_orders')
+    .select(
+      `id,
+       employee:employees!lunch_orders_employee_id_fkey(name, phone),
+       main_dish:lunch_menu_items!lunch_orders_main_dish_id_fkey(name),
+       addition:lunch_menu_items!lunch_orders_addition_id_fkey(name),
+       salad_1:lunch_menu_items!lunch_orders_salad_1_id_fkey(name),
+       salad_2:lunch_menu_items!lunch_orders_salad_2_id_fkey(name)`,
+    )
+    .eq('order_date', todayISO())
+    .order('created_at')
+  if (error) throw error
+  return (data || []).map((o) => ({
+    id: o.id,
+    employeeName: o.employee?.name || '—',
+    employeePhone: o.employee?.phone || '',
+    mainDish: o.main_dish?.name || '',
+    addition: o.addition?.name || '',
+    salad1: o.salad_1?.name || '',
+    salad2: o.salad_2?.name || '',
+  }))
+}
+
 export async function fetchTodaySheet() {
   const { data, error } = await supabase.rpc('lunch_today_sheet')
   if (error) throw error
