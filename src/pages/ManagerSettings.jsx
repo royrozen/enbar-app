@@ -1883,10 +1883,7 @@ function MonthlyReportSection() {
 
 const LUNCH_SUB_TABS = [
   { key: "roster", label: "עובדים" },
-  { key: "menu", label: "תפריט" },
-  { key: "cutoff", label: "נעילת הזמנות" },
-  { key: "today", label: "הזמנות היום" },
-  { key: "report", label: "דוח חודשי" },
+  { key: "orders", label: "הזמנות צהריים" },
 ];
 
 function LunchTab() {
@@ -1911,10 +1908,17 @@ function LunchTab() {
       </div>
 
       {subTab === "roster" && <LunchEmployeesSection />}
-      {subTab === "menu" && <LunchMenuSection />}
-      {subTab === "cutoff" && <LunchCutoffSection />}
-      {subTab === "today" && <TodayOrders />}
-      {subTab === "report" && <MonthlyReportSection />}
+      {subTab === "orders" && (
+        <div className="flex flex-col gap-6">
+          <div>
+            <h3 className="font-bold mb-3">תפריט</h3>
+            <LunchMenuSection />
+          </div>
+          <LunchCutoffSection />
+          <TodayOrders />
+          <MonthlyReportSection />
+        </div>
+      )}
     </div>
   );
 }
