@@ -16,7 +16,12 @@ import {
 } from "../components/Icons";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/AuthContext";
-import { normalizeEmployeePhone, formatEmployeePhone } from "../lib/lunch";
+import {
+  normalizeEmployeePhone,
+  formatEmployeePhone,
+  fetchLunchSettings,
+  updateLunchSettings,
+} from "../lib/lunch";
 
 const TABS = [
   { key: "clients", label: "לקוחות", Icon: UsersIcon },
@@ -1657,9 +1662,75 @@ function LunchMenuSection() {
   );
 }
 
+function LunchCutoffSection() {
+  const [settings, setSettings] = useState(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetchLunchSettings()
+      .then(setSettings)
+      .catch(() => setError("הטעינה נכשלה — נסו לרענן"));
+  }, []);
+
+  async function save(next) {
+    setError("");
+    setSaved(false);
+    setBusy(true);
+    try {
+      await updateLunchSettings(next);
+      setSettings(next);
+      setSaved(true);
+    } catch {
+      setError("השמירה נכשלה — נסו שוב");
+    }
+    setBusy(false);
+  }
+
+  if (!settings) {
+    return (
+      <div className="card p-4 flex justify-center">
+        <SpinnerIcon size={20} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="card p-4 flex flex-col gap-3">
+      <h3 className="font-bold">נעילת הזמנות</h3>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={settings.cutoffEnabled}
+          disabled={busy}
+          onChange={(e) => save({ ...settings, cutoffEnabled: e.target.checked })}
+        />
+        נעילה אוטומטית בשעה קבועה (כיבוי = פתוח כל היום)
+      </label>
+      {settings.cutoffEnabled && (
+        <div className="flex items-center gap-2">
+          <label className="label !text-xs" htmlFor="cutoff-time">שעת נעילה</label>
+          <input
+            id="cutoff-time"
+            type="time"
+            className="input !w-32"
+            value={settings.cutoffTime.slice(0, 5)}
+            disabled={busy}
+            onChange={(e) => save({ ...settings, cutoffTime: e.target.value })}
+          />
+        </div>
+      )}
+      {error && <p className="err">{error}</p>}
+      {saved && !error && <p className="text-xs text-primary">נשמר</p>}
+    </div>
+  );
+}
+
 function LunchTab() {
   return (
     <div className="flex flex-col gap-6">
+      <LunchCutoffSection />
       <div>
         <h3 className="font-bold mb-3">עובדים</h3>
         <Link

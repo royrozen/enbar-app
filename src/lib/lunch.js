@@ -19,12 +19,33 @@ export function formatEmployeePhone(phone) {
 // number before/at launch. Kept as a single named constant so it's easy to find.
 export const RESTAURANT_WHATSAPP_NUMBER = '972503338181'
 
-// Hardcoded, not admin-configurable this phase (PRD §6.4). UI-only — the DB
-// only enforces order_date = CURRENT_DATE, not time of day (PRD §6.2).
-const CUTOFF_HOUR = 12
+// Manager-configurable (single settings row, lunch_settings table) — UI-only,
+// same as the old hardcoded version: the DB only enforces order_date =
+// CURRENT_DATE, not time of day (PRD §6.2).
+export async function fetchLunchSettings() {
+  const { data, error } = await supabase
+    .from('lunch_settings')
+    .select('cutoff_enabled, cutoff_time')
+    .eq('id', true)
+    .single()
+  if (error) throw error
+  return { cutoffEnabled: data.cutoff_enabled, cutoffTime: data.cutoff_time }
+}
 
-export function isPastCutoff() {
-  return new Date().getHours() >= CUTOFF_HOUR
+export async function updateLunchSettings({ cutoffEnabled, cutoffTime }) {
+  const { error } = await supabase
+    .from('lunch_settings')
+    .update({ cutoff_enabled: cutoffEnabled, cutoff_time: cutoffTime })
+    .eq('id', true)
+  if (error) throw error
+}
+
+// settings: { cutoffEnabled, cutoffTime } from fetchLunchSettings().
+export function isPastCutoff(settings) {
+  if (!settings.cutoffEnabled) return false
+  const [h, m] = settings.cutoffTime.split(':').map(Number)
+  const now = new Date()
+  return now.getHours() > h || (now.getHours() === h && now.getMinutes() >= m)
 }
 
 export async function lookupEmployee(phone) {
