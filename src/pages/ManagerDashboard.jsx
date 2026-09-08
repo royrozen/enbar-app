@@ -277,13 +277,13 @@ export default function ManagerDashboard() {
 
         {/* Filters */}
         <div className="card mt-4 p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
-          <div className="sm:col-span-1">
+          <div className="min-w-0 sm:col-span-1">
             <label className="label !text-xs" htmlFor="f-project">
               פרויקט
             </label>
             <select
               id="f-project"
-              className="input !min-h-[48px]"
+              className="input !min-h-[48px] min-w-0"
               value={filters.projectId}
               onChange={(e) =>
                 setFilters((f) => ({ ...f, projectId: e.target.value }))
@@ -297,13 +297,13 @@ export default function ManagerDashboard() {
               ))}
             </select>
           </div>
-          <div className="sm:col-span-1">
+          <div className="min-w-0 sm:col-span-1">
             <label className="label !text-xs" htmlFor="f-lead">
               ראש צוות
             </label>
             <select
               id="f-lead"
-              className="input !min-h-[48px]"
+              className="input !min-h-[48px] min-w-0"
               value={filters.leadId}
               onChange={(e) =>
                 setFilters((f) => ({ ...f, leadId: e.target.value }))
@@ -317,33 +317,35 @@ export default function ManagerDashboard() {
               ))}
             </select>
           </div>
-          <div className="min-w-0">
-            <label className="label !text-xs" htmlFor="f-from">
-              מתאריך
-            </label>
-            <input
-              id="f-from"
-              type="date"
-              className="input !min-h-[48px] w-full min-w-0"
-              value={filters.from}
-              onChange={(e) =>
-                setFilters((f) => ({ ...f, from: e.target.value }))
-              }
-            />
-          </div>
-          <div className="min-w-0">
-            <label className="label !text-xs" htmlFor="f-to">
-              עד תאריך
-            </label>
-            <input
-              id="f-to"
-              type="date"
-              className="input !min-h-[48px] w-full min-w-0"
-              value={filters.to}
-              onChange={(e) =>
-                setFilters((f) => ({ ...f, to: e.target.value }))
-              }
-            />
+          <div className="min-w-0 grid grid-cols-2 gap-3 sm:col-span-2 lg:col-span-2">
+            <div className="min-w-0">
+              <label className="label !text-xs" htmlFor="f-from">
+                מתאריך
+              </label>
+              <input
+                id="f-from"
+                type="date"
+                className="input !min-h-[48px] w-full min-w-0"
+                value={filters.from}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, from: e.target.value }))
+                }
+              />
+            </div>
+            <div className="min-w-0">
+              <label className="label !text-xs" htmlFor="f-to">
+                עד תאריך
+              </label>
+              <input
+                id="f-to"
+                type="date"
+                className="input !min-h-[48px] w-full min-w-0"
+                value={filters.to}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, to: e.target.value }))
+                }
+              />
+            </div>
           </div>
           <button
             className="btn btn-ghost !min-h-[48px] sm:col-span-2 lg:col-span-1"
