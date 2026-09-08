@@ -1794,8 +1794,8 @@ function MonthlyReportSection() {
   }
 
   function toCsv(rows) {
-    const header = "עובד,טלפון,ימי הזמנה";
-    const lines = rows.map((r) => `"${r.name.replace(/"/g, '""')}",${r.phone},${r.count}`);
+    const header = "עובד,ימי הזמנה";
+    const lines = rows.map((r) => `"${r.name.replace(/"/g, '""')}",${r.count}`);
     return "﻿" + [header, ...lines].join("\n"); // BOM so Excel opens Hebrew correctly
   }
 
@@ -1852,10 +1852,13 @@ function MonthlyReportSection() {
             onChange={(e) => setMonth(e.target.value)}
           />
         </div>
-        <button className="btn btn-outline self-end" onClick={exportCsv} disabled={!rows?.length}>
-          <DownloadIcon size={18} />
-          ייצוא ל-CSV
-        </button>
+        <div>
+          <label className="label !text-xs invisible">ייצוא</label>
+          <button className="btn btn-outline" onClick={exportCsv} disabled={!rows?.length}>
+            <DownloadIcon size={18} />
+            ייצוא ל-CSV
+          </button>
+        </div>
       </div>
 
       {error && <p className="err">{error}</p>}
