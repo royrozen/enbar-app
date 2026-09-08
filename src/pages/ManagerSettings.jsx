@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import Header from "../components/Header";
 import {
-  ClipboardIcon,
   UsersIcon,
   HardHatIcon,
   PlusIcon,
@@ -13,10 +12,20 @@ import {
   XIcon,
   TrashIcon,
   ChevronDownIcon,
+  RefreshIcon,
+  DownloadIcon,
 } from "../components/Icons";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/AuthContext";
-import { normalizeEmployeePhone, formatEmployeePhone } from "../lib/lunch";
+import {
+  normalizeEmployeePhone,
+  formatEmployeePhone,
+  fetchLunchSettings,
+  updateLunchSettings,
+  fetchTodayOrders,
+  fetchMonthlyCounts,
+} from "../lib/lunch";
+import { formatDate, todayISO } from "../lib/format";
 
 const TABS = [
   { key: "clients", label: "לקוחות", Icon: UsersIcon },
@@ -1657,35 +1666,273 @@ function LunchMenuSection() {
   );
 }
 
-function LunchTab() {
+function LunchCutoffSection() {
+  const [settings, setSettings] = useState(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetchLunchSettings()
+      .then(setSettings)
+      .catch(() => setError("הטעינה נכשלה — נסו לרענן"));
+  }, []);
+
+  async function save(next) {
+    setError("");
+    setSaved(false);
+    setBusy(true);
+    try {
+      await updateLunchSettings(next);
+      setSettings(next);
+      setSaved(true);
+    } catch {
+      setError("השמירה נכשלה — נסו שוב");
+    }
+    setBusy(false);
+  }
+
+  if (!settings) {
+    return (
+      <div className="card p-4 flex justify-center">
+        <SpinnerIcon size={20} />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h3 className="font-bold mb-3">עובדים</h3>
-        <Link
-          to="/manager/lunch-report"
-          className="card p-4 flex items-center gap-4 hover:border-accent transition-colors duration-200 mb-4"
-        >
-          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-white">
-            <ClipboardIcon size={24} />
-          </span>
-          <div>
-            <p className="text-sm font-bold leading-tight">דוח ארוחות חודשי</p>
-            <p className="text-sm text-primary mt-1">מעבר לדוח הצהריים</p>
-          </div>
-        </Link>
-        <LunchEmployeesSection />
-      </div>
-      <div>
-        <h3 className="font-bold mb-3">תפריט</h3>
-        <LunchMenuSection />
-      </div>
+    <div className="card p-4 flex flex-col gap-3">
+      <h3 className="font-bold">נעילת הזמנות</h3>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={settings.cutoffEnabled}
+          disabled={busy}
+          onChange={(e) => save({ ...settings, cutoffEnabled: e.target.checked })}
+        />
+        נעילה אוטומטית בשעה קבועה (כיבוי = פתוח כל היום)
+      </label>
+      {settings.cutoffEnabled && (
+        <div className="flex items-center gap-2">
+          <label className="label !text-xs" htmlFor="cutoff-time">שעת נעילה</label>
+          <input
+            id="cutoff-time"
+            type="time"
+            className="input !w-32"
+            value={settings.cutoffTime.slice(0, 5)}
+            disabled={busy}
+            onChange={(e) => save({ ...settings, cutoffTime: e.target.value })}
+          />
+        </div>
+      )}
+      {error && <p className="err">{error}</p>}
+      {saved && !error && <p className="text-xs text-primary">נשמר</p>}
     </div>
   );
 }
 
+function TodayOrders() {
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    setError("");
+    try {
+      setRows(await fetchTodayOrders());
+    } catch {
+      setError("הטעינה נכשלה — נסו לרענן");
+    }
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="card p-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h3 className="font-bold">הזמנות היום — {formatDate(todayISO())}</h3>
+        <button className="btn btn-ghost text-sm" onClick={load} disabled={loading}>
+          <RefreshIcon size={18} className={loading ? "spin" : ""} />
+          רענון
+        </button>
+      </div>
+
+      {error && <p className="err mt-2">{error}</p>}
+
+      <ul className="mt-3 flex flex-col gap-2">
+        {(rows || []).map((o) => (
+          <li key={o.id} className="rounded-xl border-2 border-border p-3 flex items-center gap-3 flex-wrap">
+            <div className="flex-1 min-w-[140px]">
+              <p className="font-bold truncate">{o.employeeName}</p>
+              <p className="text-xs text-primary" dir="ltr">{o.employeePhone}</p>
+            </div>
+            <div className="flex-[2] min-w-[220px] text-sm text-primary">
+              {[o.mainDish, o.addition, o.salad1, o.salad2].filter(Boolean).join(" · ")}
+            </div>
+          </li>
+        ))}
+        {rows?.length === 0 && (
+          <li className="p-6 text-center text-primary">עדיין לא הוזמנו ארוחות היום</li>
+        )}
+        {rows === null && (
+          <li className="flex justify-center py-8 text-primary"><SpinnerIcon size={28} /></li>
+        )}
+      </ul>
+    </div>
+  );
+}
+
+function MonthlyReportSection() {
+  function currentMonthValue() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  function toCsv(rows) {
+    const header = "עובד,ימי הזמנה";
+    const lines = rows.map((r) => `"${r.name.replace(/"/g, '""')}",${r.count}`);
+    return "﻿" + [header, ...lines].join("\n"); // BOM so Excel opens Hebrew correctly
+  }
+
+  const [month, setMonth] = useState(currentMonthValue);
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function load() {
+    const [year, m] = month.split("-").map(Number);
+    setLoading(true);
+    setError("");
+    try {
+      setRows(await fetchMonthlyCounts(year, m));
+    } catch {
+      setError("הטעינה נכשלה — נסו לרענן");
+    }
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [month]);
+
+  function exportCsv() {
+    const blob = new Blob([toCsv(rows || [])], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `lunch-report-${month}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h3 className="font-bold">דוח ארוחות חודשי</h3>
+        <button className="btn btn-ghost text-sm" onClick={load} disabled={loading}>
+          <RefreshIcon size={18} className={loading ? "spin" : ""} />
+          רענון
+        </button>
+      </div>
+
+      <div className="card p-4 flex items-center gap-3 flex-wrap">
+        <div>
+          <label className="label !text-xs" htmlFor="lunch-month">חודש</label>
+          <input
+            id="lunch-month"
+            type="month"
+            className="input"
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="label !text-xs invisible">ייצוא</label>
+          <button className="btn btn-outline" onClick={exportCsv} disabled={!rows?.length}>
+            <DownloadIcon size={18} />
+            ייצוא ל-CSV
+          </button>
+        </div>
+      </div>
+
+      {error && <p className="err">{error}</p>}
+
+      <ul className="flex flex-col gap-2">
+        {(rows || []).map((r) => (
+          <li key={r.employeeId} className="card p-4 flex items-center justify-between gap-3">
+            <div>
+              <p className="font-bold">{r.name}</p>
+              <p className="text-xs text-primary" dir="ltr">{r.phone}</p>
+            </div>
+            <p className="text-lg font-black text-accent">{r.count}</p>
+          </li>
+        ))}
+        {rows?.length === 0 && (
+          <li className="card p-6 text-center text-primary">אין הזמנות בחודש זה</li>
+        )}
+        {rows === null && (
+          <li className="flex justify-center py-8 text-primary"><SpinnerIcon size={28} /></li>
+        )}
+      </ul>
+    </div>
+  );
+}
+
+const LUNCH_SUB_TABS = [
+  { key: "roster", label: "עובדים" },
+  { key: "orders", label: "הזמנות צהריים" },
+  { key: "report", label: "דוח ארוחות חודשי" },
+];
+
+function LunchTab() {
+  const [subTab, setSubTab] = useState("roster");
+
+  return (
+    <div>
+      <div className="flex gap-1 flex-wrap mb-4">
+        {LUNCH_SUB_TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setSubTab(key)}
+            className={`px-3 py-2 rounded-full text-sm font-bold transition-colors duration-200 ${
+              subTab === key
+                ? "bg-accent text-white"
+                : "bg-muted text-primary hover:text-foreground"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {subTab === "roster" && <LunchEmployeesSection />}
+      {subTab === "orders" && (
+        <div className="flex flex-col gap-6">
+          <div>
+            <h3 className="font-bold mb-3">תפריט</h3>
+            <LunchMenuSection />
+          </div>
+          <LunchCutoffSection />
+          <TodayOrders />
+        </div>
+      )}
+      {subTab === "report" && <MonthlyReportSection />}
+    </div>
+  );
+}
+
+const TAB_KEYS = TABS.map((t) => t.key);
+
 export default function ManagerSettings() {
-  const [tab, setTab] = useState("clients");
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const [tab, setTab] = useState(TAB_KEYS.includes(tabParam) ? tabParam : "clients");
 
   return (
     <div className="min-h-dvh manager-desktop">

@@ -1,29 +1,34 @@
 import { useEffect, useState } from 'react'
 import Logo from '../components/Logo'
 import { SpinnerIcon, DownloadIcon, SendIcon } from '../components/Icons'
-import { isPastCutoff, fetchTodaySheet, RESTAURANT_WHATSAPP_NUMBER } from '../lib/lunch'
+import { isPastCutoff, fetchLunchSettings, fetchTodaySheet, RESTAURANT_WHATSAPP_NUMBER } from '../lib/lunch'
 import { renderLunchImage, downloadImage } from '../lib/lunchImage'
 import { formatDate, todayISO } from '../lib/format'
 
-function NotYetLocked() {
+function NotYetLocked({ cutoffTime }) {
   return (
     <div className="min-h-dvh flex items-center justify-center px-4">
       <div className="card p-6 w-full max-w-sm text-center">
         <Logo className="h-10 w-auto mx-auto mb-4" />
         <p className="text-lg font-black">הרשימה עדיין פתוחה</p>
-        <p className="text-sm text-primary mt-2">הרשימה תינעל ותוצג בשעה 12:00</p>
+        <p className="text-sm text-primary mt-2">הרשימה תינעל ותוצג בשעה {cutoffTime.slice(0, 5)}</p>
       </div>
     </div>
   )
 }
 
 export default function LunchToday() {
+  const [settings, setSettings] = useState(null)
   const [imageUrl, setImageUrl] = useState(null)
   const [blob, setBlob] = useState(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (!isPastCutoff()) return
+    fetchLunchSettings().then(setSettings).catch(() => setSettings({ cutoffEnabled: true, cutoffTime: '12:00:00' }))
+  }, [])
+
+  useEffect(() => {
+    if (!settings || !isPastCutoff(settings)) return
     let cancelled = false
     async function load() {
       try {
@@ -37,10 +42,17 @@ export default function LunchToday() {
       }
     }
     load()
-    return () => cancelled = true
-  }, [])
+    return () => { cancelled = true }
+  }, [settings])
 
-  if (!isPastCutoff()) return <NotYetLocked />
+  if (settings === null) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center">
+        <SpinnerIcon size={28} />
+      </div>
+    )
+  }
+  if (!isPastCutoff(settings)) return <NotYetLocked cutoffTime={settings.cutoffTime} />
 
   return (
     <div className="min-h-dvh px-4 py-8 flex flex-col items-center gap-4">

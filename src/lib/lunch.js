@@ -19,12 +19,33 @@ export function formatEmployeePhone(phone) {
 // number before/at launch. Kept as a single named constant so it's easy to find.
 export const RESTAURANT_WHATSAPP_NUMBER = '972503338181'
 
-// Hardcoded, not admin-configurable this phase (PRD §6.4). UI-only — the DB
-// only enforces order_date = CURRENT_DATE, not time of day (PRD §6.2).
-const CUTOFF_HOUR = 12
+// Manager-configurable (single settings row, lunch_settings table) — UI-only,
+// same as the old hardcoded version: the DB only enforces order_date =
+// CURRENT_DATE, not time of day (PRD §6.2).
+export async function fetchLunchSettings() {
+  const { data, error } = await supabase
+    .from('lunch_settings')
+    .select('cutoff_enabled, cutoff_time')
+    .eq('id', true)
+    .single()
+  if (error) throw error
+  return { cutoffEnabled: data.cutoff_enabled, cutoffTime: data.cutoff_time }
+}
 
-export function isPastCutoff() {
-  return new Date().getHours() >= CUTOFF_HOUR
+export async function updateLunchSettings({ cutoffEnabled, cutoffTime }) {
+  const { error } = await supabase
+    .from('lunch_settings')
+    .update({ cutoff_enabled: cutoffEnabled, cutoff_time: cutoffTime })
+    .eq('id', true)
+  if (error) throw error
+}
+
+// settings: { cutoffEnabled, cutoffTime } from fetchLunchSettings().
+export function isPastCutoff(settings) {
+  if (!settings.cutoffEnabled) return false
+  const [h, m] = settings.cutoffTime.split(':').map(Number)
+  const now = new Date()
+  return now.getHours() > h || (now.getHours() === h && now.getMinutes() >= m)
 }
 
 export async function lookupEmployee(phone) {
@@ -43,6 +64,36 @@ export async function getLastOrder(employeeId) {
   const { data, error } = await supabase.rpc('lunch_get_last_order', { p_employee_id: employeeId })
   if (error) throw error
   return data?.[0] || null
+}
+
+// factory_manager-only (RLS) — every order for today, one row per employee
+// with their actual selections. Unlike fetchTodaySheet() (the public RPC
+// behind /lunch/today), this reads lunch_orders directly since managers
+// already have full SELECT on it, and isn't gated by the cutoff — a manager
+// can check who's ordered so far at any time of day.
+export async function fetchTodayOrders() {
+  const { data, error } = await supabase
+    .from('lunch_orders')
+    .select(
+      `id,
+       employee:employees!lunch_orders_employee_id_fkey(name, phone),
+       main_dish:lunch_menu_items!lunch_orders_main_dish_id_fkey(name),
+       addition:lunch_menu_items!lunch_orders_addition_id_fkey(name),
+       salad_1:lunch_menu_items!lunch_orders_salad_1_id_fkey(name),
+       salad_2:lunch_menu_items!lunch_orders_salad_2_id_fkey(name)`,
+    )
+    .eq('order_date', todayISO())
+    .order('created_at')
+  if (error) throw error
+  return (data || []).map((o) => ({
+    id: o.id,
+    employeeName: o.employee?.name || '—',
+    employeePhone: o.employee?.phone || '',
+    mainDish: o.main_dish?.name || '',
+    addition: o.addition?.name || '',
+    salad1: o.salad_1?.name || '',
+    salad2: o.salad_2?.name || '',
+  }))
 }
 
 export async function fetchTodaySheet() {

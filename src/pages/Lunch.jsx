@@ -4,6 +4,7 @@ import { SpinnerIcon, CheckIcon } from '../components/Icons'
 import {
   normalizeEmployeePhone,
   isPastCutoff,
+  fetchLunchSettings,
   lookupEmployee,
   getOrder,
   getLastOrder,
@@ -241,8 +242,20 @@ function OrderForm({ employee }) {
 
 export default function Lunch() {
   const [employee, setEmployee] = useState(null)
+  const [settings, setSettings] = useState(null)
 
-  if (isPastCutoff()) return <LockedNotice />
+  useEffect(() => {
+    fetchLunchSettings().then(setSettings).catch(() => setSettings({ cutoffEnabled: true, cutoffTime: '12:00:00' }))
+  }, [])
+
+  if (settings === null) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center">
+        <SpinnerIcon size={28} />
+      </div>
+    )
+  }
+  if (isPastCutoff(settings)) return <LockedNotice />
   if (!employee) return <PhoneEntry onMatched={setEmployee} />
   return <OrderForm employee={employee} />
 }
