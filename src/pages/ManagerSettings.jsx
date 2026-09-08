@@ -1944,12 +1944,12 @@ export default function ManagerSettings() {
           נשמרת
         </p>
 
-        <div className="mt-5 flex gap-2 border-b border-border">
+        <div className="mt-5 flex gap-2 border-b border-border overflow-x-auto overflow-y-hidden">
           {TABS.map(({ key, label, Icon }) => (
             <button
               key={key}
               onClick={() => setTab(key)}
-              className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 -mb-px transition-colors duration-200 ${
+              className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 -mb-px shrink-0 whitespace-nowrap transition-colors duration-200 ${
                 tab === key
                   ? "border-accent text-accent"
                   : "border-transparent text-primary hover:text-foreground"

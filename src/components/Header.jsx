@@ -45,7 +45,7 @@ export default function Header({ backTo, title }) {
 
   return (
     <header className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-border">
-      <div className="mx-auto max-w-5xl px-4 h-16 flex items-center gap-2">
+      <div className="mx-auto max-w-5xl px-4 h-16 grid grid-cols-[auto_1fr_auto] items-center gap-2">
         <div className="flex items-center gap-1.5 min-w-0">
           {backTo && (
             <button
@@ -63,6 +63,8 @@ export default function Header({ backTo, title }) {
             <h1 className="text-lg font-bold truncate ms-2 hidden sm:block">{title}</h1>
           )}
         </div>
+
+        <div />
 
         <div className="flex items-center gap-1">
           {isManager && viewAsTeamLead && (
@@ -82,7 +84,7 @@ export default function Header({ backTo, title }) {
             </details>
           )}
           {isManager && !viewAsTeamLead && (
-            <nav className="hidden sm:flex items-center gap-1 me-1">
+            <nav className="hidden sm:flex items-center gap-4 me-2">
               <NavLink
                 to="/manager"
                 end
