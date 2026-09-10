@@ -105,9 +105,10 @@ Each `machine_periods` row carries its own due date, computed from a fixed sched
 Anchor field used depends on the period's `schedule_kind`:
 - **weekly** → a day of the week (Sunday–Friday only — the factory's work week)
 - **monthly** → a day of the month (1–28, to avoid short-month ambiguity)
-- **yearly** (incl. tri-yearly, via `interval_years`) → an exact month+day anchor date
+- **triannual** (`תלת שנתי` — 3 times a year, every 4 months) → an anchor month + day of month; the next two occurrences are 4 and 8 months later, wrapping the year
+- **yearly** (`שנתי` — once a year, `interval_years = 1`) → an exact month+day anchor date
 
-**Saturday shift rule:** weekly periods can't land on Saturday at all (the weekday picker only offers Sunday–Friday). For monthly and yearly periods, if the computed due date falls on a Saturday, it shifts forward to the following Sunday — applied every time `next_due_date` is computed, both on initial assignment and on every advance-on-completion.
+**Saturday shift rule:** weekly periods can't land on Saturday at all (the weekday picker only offers Sunday–Friday). For monthly, triannual, and yearly periods, if the computed due date falls on a Saturday, it shifts forward to the following Sunday — applied every time `next_due_date` is computed, both on initial assignment and on every advance-on-completion.
 
 ### "Missed" is derived, not a stored flag
 Because `next_due_date` only moves forward on full completion, **"missed" = `next_due_date` is in the past**. No separate status field or cron job needed — the same computed field powers "what's due this week," "what's overdue," and the manager's missed-machines report. There is no grace period: a period becomes missed the day after its due date if not fully closed.
@@ -126,21 +127,24 @@ Calendar week (Sunday–Friday, matching actual factory work days), not a rollin
 
 New tables follow the app's existing conventions: `uuid` primary keys (`gen_random_uuid()`), `is_active boolean default true` + nullable `deleted_at` for soft-delete, `created_at timestamptz default now()`.
 
-### 6.1 Catalogs (admin-extensible)
+### 6.1 Catalogs
 
 ```sql
-CREATE TABLE maintenance_periods (
+CREATE TABLE maintenance_periods (           -- fixed/seeded, NOT admin-manageable (see §7.1)
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,                          -- e.g. 'שבועי', 'חודשי', 'שנתי', 'תלת שנתי'
-  schedule_kind text NOT NULL CHECK (schedule_kind IN ('weekly','monthly','yearly')),
-  interval_years integer NOT NULL DEFAULT 1,    -- only meaningful when schedule_kind = 'yearly' (3 = tri-yearly)
+  name text NOT NULL,                          -- 'שבועי', 'חודשי', 'שנתי', 'תלת שנתי' (3x/year)
+  schedule_kind text NOT NULL CHECK (schedule_kind IN ('weekly','monthly','triannual','yearly')),
+  interval_years integer NOT NULL DEFAULT 1,    -- kept for schema flexibility; the only seeded yearly-kind row uses 1 (no 3-year variant anymore — Roy deleted it)
   sort_order integer NOT NULL DEFAULT 0,
   is_active boolean NOT NULL DEFAULT true,
   deleted_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+-- Seeded once via migration with the four rows above. No admin UI reads/writes this table's
+-- catalog rows (Roy's explicit decision — see §7.1). Adding a fifth frequency in the future
+-- means a new migration + a new next-due-date helper branch, not an in-app action.
 
-CREATE TABLE maintenance_tasks (
+CREATE TABLE maintenance_tasks (              -- admin-extensible (unchanged)
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
   is_active boolean NOT NULL DEFAULT true,
@@ -316,23 +320,20 @@ CREATE TABLE fault_report_parts (             -- optional, multi
 
 ## 7. Screens
 
-### 7.1 Admin — catalogs (`/manager/settings`, new tabs alongside existing ones)
-- **מחזורי טיפול** — name, schedule kind, interval (for yearly-kind). List+add, deactivate-only.
-- **משימות תחזוקה** — name only. List+add, deactivate-only.
-- **New control on the existing עובדים (employees) tab:** a per-employee toggle "גישה למודול תחזוקה" (`maintenance_access_enabled`), default on. `factory_manager`/`platform_admin` only.
+### 7.1 Admin — תחזוקת מכונות (new top-level tab under `/manager/settings`, parent of two sub-tabs)
+This replaces what was three separate ideas (a standalone periods tab, a standalone `/manager/machines` area, and a machine-nested parts tab) with **one parent tab** grouping everything machine-maintenance-related — Roy's explicit restructuring.
+
+- **מכונות** (sub-tab) — list of machines (`#{machine_no}` zero-padded, name, location, active toggle), add/edit, per-machine period assignment (pick from the fixed period list — see below — set its schedule anchor, and pick tasks from the task catalog for that period on this machine), and QR display for printing. Parts live inside a specific machine's own detail view (drill in from this list), not as a separate flat sub-tab — a part only makes sense in the context of one machine.
+- **משימות תחזוקה** (sub-tab) — name only. List+add, deactivate-only. Still admin-extensible (unchanged from before).
+- **No מחזורי טיפול sub-tab.** Periods are fixed/seeded (§6.1) — Roy's explicit decision to remove admin management of this catalog entirely. The four periods (`שבועי`, `חודשי`, `שנתי`, `תלת שנתי`) are chosen from a fixed list wherever a period needs to be picked (e.g. assigning a period to a machine), never added/edited/deactivated through any screen.
+- **New control on the existing עובדים (employees) tab (unrelated to תחזוקת מכונות, stays where it is):** a per-employee toggle "גישה למודול תחזוקה" (`maintenance_access_enabled`), default on. `factory_manager`/`platform_admin` only.
 - (No QR-password field — removed in v2, replaced by real auth.)
 
-### 7.2 Admin — machines (`/manager/machines`, new area)
-- List of machines (`#{machine_no}` zero-padded, name, location, active toggle).
-- Add/edit machine: name, location.
-- Per-machine period assignment: add a period from the catalog, set its schedule anchor, and pick which tasks from the global catalog apply to that period on this machine.
-- QR display: generated from `machines.id`, shown for printing the moment a machine is created.
-
-### 7.3 Admin — parts (`/manager/machines/:id/parts` or a tab within the machine screen)
+### 7.2 Admin — parts (within a machine's own detail view, under תחזוקת מכונות → מכונות)
 - List of parts for the machine (`part_no`, name, quantity, shelf location).
 - Add/edit: all fields from §6.5, including photo upload.
 
-### 7.4 Field — QR entry (`/maintenance/:machineId`, requires auth)
+### 7.3 Field — QR entry (`/maintenance/:machineId`, requires auth)
 - Scanning the QR opens this route. If there's no active session, the app's existing phone-OTP login intercepts first (same mechanism `/manager/*` already uses) — first-time factory workers are auto-provisioned per §4.0; anyone whose `employees.maintenance_access_enabled` is off, or whose phone isn't a registered active employee, sees a clear "access not enabled" message instead of the checklist.
 - Machine header (name, `#{machine_no}`, location).
 - Merged checklist, grouped by period name, each task a checkbox; only periods due within the current calendar week are shown.
@@ -340,13 +341,13 @@ CREATE TABLE fault_report_parts (             -- optional, multi
 - Submit button: allowed with partial completion; closes only the periods that ended up fully checked.
 - A separate, always-visible **"דיווח תקלה / שבר"** button/link on the same machine screen.
 
-### 7.5 Field — fault report (`/maintenance/:machineId/fault`, same session)
+### 7.4 Field — fault report (`/maintenance/:machineId/fault`, same session)
 - Description (required text), photo (optional), severity/urgency single combined scale (נמוכה / בינונית / גבוהה / דחוף).
 - Optional multi-select of parts from this machine's catalog, autocomplete-as-you-type.
 - **No manual reporter picker** — `reported_by` is the session's `profiles.id`.
 - Submit → `status = 'new'`.
 
-### 7.6 Manager — unified reports (`/manager/maintenance`, new area, `factory_manager`/`platform_admin`)
+### 7.5 Manager — unified reports (`/manager/maintenance`, new area, `factory_manager`/`platform_admin`)
 One screen, tabs/filters for three views:
 - **היסטוריה** — completed visits (`maintenance_visits` joined to their period logs and `profiles.display_name`), filterable by machine/period/worker/date range.
 - **פוספסו** — machines/periods where `next_due_date` is in the past (derived, no stored flag).
@@ -366,7 +367,7 @@ RLS on every new table is **`authenticated`-only**, matching the rest of the app
 ## 9. Resolved decisions
 
 - **RLS posture — corrected.** `authenticated`-only across the board, not permissive-`anon`. The original assumption (based on documentation that described Auth Phase 1 as "in progress") was wrong; the live code shows it's complete. No separate hardening pass needed later — this module ships already-hardened.
-- **Saturday edge case.** Weekly periods can't land on Saturday (weekday check 0–5 only). Monthly/yearly periods whose computed date falls on Saturday shift to the following Sunday.
+- **Saturday edge case.** Weekly periods can't land on Saturday (weekday check 0–5 only). Monthly, triannual, and yearly periods whose computed date falls on Saturday shift to the following Sunday.
 - **New machine → period assignment is manual.** Confirmed — no auto-assignment when a new period type is added to the catalog.
 - **Storage/route guardrail.** `machine_no`/`part_no`/`fault_no` are display-only, never used in a QR URL, storage path, or route parameter. The QR always encodes `machines.id`.
 - **Storage buckets.** Two new dedicated public buckets, `machine-parts` and `fault-reports`, not a reuse of `report-photos`.
@@ -374,6 +375,9 @@ RLS on every new table is **`authenticated`-only**, matching the rest of the app
 - **Role naming.** `factory_worker`, not `maintenance_worker` — these are general factory employees (one flat tier today), not maintenance specialists.
 - **Per-employee access toggle.** Built now (not deferred), default enabled, editable by `factory_manager`/`platform_admin` from the existing employees admin tab.
 - **`platform_admin` scope, corrected mid-implementation.** Originally scoped to this module only; changed to full app-wide super-admin (identical to `factory_manager` everywhere) once the narrower version's gaps became visible during Phase 2. Applied as a standalone RLS migration widening every pre-existing `factory_manager`-only policy in the schema (40 policies, 16 tables — `catalog_items`, `clients`, `employees`, `exception_logs`, `exception_photos`, `lunch_menu_items`, `lunch_orders`, `lunch_settings`, `part_orders`, `part_requests`, `profiles`, `projects`, `report_photos`, `reports`, `signature_requests`, `team_leads`), tagged separately in git from this module's own phase tags.
+- **Periods catalog is fixed, not admin-manageable — corrected after Phase 2 shipped.** Originally an admin-editable list+add tab (like tasks). Roy's decision: remove it entirely. `maintenance_periods` is now seeded once via migration with four fixed rows and never exposed to any admin CRUD screen. Adding a fifth frequency later is a developer/migration action, not an in-app one.
+- **New frequency: `תלת שנתי` = 3 times a year, not "once every 3 years."** This is a genuine redefinition — the term was originally used (in Roy's own first message and the original schema) for a once-per-3-years cadence. That cadence was briefly renamed to `אחת לשלוש שנים` to resolve the ambiguity, then **deleted outright** on Roy's later instruction — it isn't a period the module needs. `תלת שנתי` is reserved going forward for the 3x/year (~every 4 months) cadence, its own `schedule_kind` (`'triannual'`), reusing the `anchor_month`/`day_of_month` fields with occurrences every 4 months. The final fixed catalog is four rows: `שבועי`, `חודשי`, `שנתי` (plain once-a-year — restored after being accidentally dropped from an earlier edit of this document), `תלת שנתי`.
+- **Admin navigation restructured — corrected after Phase 2 shipped.** What was three separate ideas (a periods tab, a standalone `/manager/machines` area, a machine-nested parts tab) is now one parent tab, **תחזוקת מכונות**, with two sub-tabs: **מכונות** (machines, with parts reachable inside each machine's own detail — not a separate flat sub-tab) and **משימות תחזוקה** (tasks, unchanged). The employees-tab access toggle stays where it is, unrelated to this restructuring.
 
 ## 10. Out of scope (explicit)
 

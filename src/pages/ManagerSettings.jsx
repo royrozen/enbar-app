@@ -14,8 +14,7 @@ import {
   ChevronDownIcon,
   RefreshIcon,
   DownloadIcon,
-  CalendarIcon,
-  ClipboardIcon,
+  FactoryIcon,
 } from "../components/Icons";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/AuthContext";
@@ -34,8 +33,7 @@ const TABS = [
   { key: "leads", label: "ראשי צוות", Icon: HardHatIcon },
   { key: "catalog", label: "קטלוג חלקים", Icon: PackageIcon },
   { key: "lunch", label: "עובדים", Icon: HardHatIcon },
-  { key: "maintenance-periods", label: "מחזורי טיפול", Icon: CalendarIcon },
-  { key: "maintenance-tasks", label: "משימות תחזוקה", Icon: ClipboardIcon },
+  { key: "machine-maintenance", label: "תחזוקת מכונות", Icon: FactoryIcon },
 ];
 
 function ActiveToggle({ item, onToggle, busy }) {
@@ -1347,153 +1345,50 @@ function MaintenanceTasksTab() {
   );
 }
 
-const SCHEDULE_KIND_LABELS = {
-  weekly: "שבועי",
-  monthly: "חודשי",
-  yearly: "שנתי",
-};
+// Phase 2-revision: מכונות sub-tab is a stub — Phase 3 builds its content
+// (machine list/add/edit, period assignment, QR). This phase only establishes
+// the תחזוקת מכונות parent tab and its two sub-tabs.
+function MachinesStubSection() {
+  return (
+    <div className="card p-8 text-center text-primary">
+      <p className="font-bold">מכונות</p>
+      <p className="text-sm mt-1">בקרוב — ניהול מכונות ומחזורי טיפול</p>
+    </div>
+  );
+}
 
-// Phase 2 (maintenance module): list+add, deactivate-only — no edit, no hard
-// delete, per the implementation plan's explicit stop condition for this phase.
-function MaintenancePeriodsTab() {
-  const { items, error, load, toggleActive } = useAdminList("maintenance_periods");
-  const [showAdd, setShowAdd] = useState(false);
-  const [name, setName] = useState("");
-  const [scheduleKind, setScheduleKind] = useState("weekly");
-  const [intervalYears, setIntervalYears] = useState(1);
-  const [formError, setFormError] = useState("");
-  const [busy, setBusy] = useState(false);
+const MACHINE_MAINTENANCE_SUB_TABS = [
+  { key: "machines", label: "מכונות" },
+  { key: "tasks", label: "משימות תחזוקה" },
+];
 
-  async function add(e) {
-    e.preventDefault();
-    if (!name.trim()) {
-      setFormError("יש להזין שם מחזור");
-      return;
-    }
-    setFormError("");
-    setBusy(true);
-    const { error: err } = await supabase.from("maintenance_periods").insert({
-      name: name.trim(),
-      schedule_kind: scheduleKind,
-      interval_years: scheduleKind === "yearly" ? Number(intervalYears) || 1 : 1,
-    });
-    setBusy(false);
-    if (err) {
-      setFormError("הוספת המחזור נכשלה — נסו שוב");
-      return;
-    }
-    setName("");
-    setScheduleKind("weekly");
-    setIntervalYears(1);
-    setShowAdd(false);
-    load();
-  }
+// Phase 2-revision: one parent tab grouping everything machine-maintenance-
+// related, replacing the earlier standalone מחזורי טיפול tab (deleted — periods
+// are now fixed/seeded, never admin-editable) and the earlier flat
+// משימות תחזוקה top-level tab (relocated here unchanged).
+function MachineMaintenanceTab() {
+  const [subTab, setSubTab] = useState("machines");
 
   return (
-    <div className="flex flex-col gap-4">
-      {!showAdd ? (
-        <div>
-          <button className="btn btn-accent" onClick={() => setShowAdd(true)}>
-            <PlusIcon size={18} />
-            הוספת מחזור טיפול
-          </button>
-        </div>
-      ) : (
-        <form onSubmit={add} className="card p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <h3 className="font-bold sm:col-span-3">הוספת מחזור טיפול</h3>
-          <div>
-            <label className="label !text-xs">שם המחזור *</label>
-            <input
-              className="input"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="למשל: שבועי"
-              autoFocus
-            />
-          </div>
-          <div>
-            <label className="label !text-xs">תדירות *</label>
-            <select
-              className="input"
-              value={scheduleKind}
-              onChange={(e) => setScheduleKind(e.target.value)}
-              aria-label="תדירות"
-            >
-              {Object.entries(SCHEDULE_KIND_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
-          {scheduleKind === "yearly" && (
-            <div>
-              <label className="label !text-xs">מרווח בשנים</label>
-              <input
-                type="number"
-                min={1}
-                className="input"
-                value={intervalYears}
-                onChange={(e) => setIntervalYears(e.target.value)}
-                placeholder="1 = שנתי, 3 = תלת שנתי"
-              />
-            </div>
-          )}
-          {formError && <p className="err sm:col-span-3">{formError}</p>}
-          <div className="sm:col-span-3 flex gap-2">
-            <button className="btn btn-accent" disabled={busy}>
-              {busy ? <SpinnerIcon size={18} /> : <PlusIcon size={18} />}
-              הוספה
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              disabled={busy}
-              onClick={() => setShowAdd(false)}
-            >
-              ביטול
-            </button>
-          </div>
-        </form>
-      )}
-
-      {error && <p className="err">{error}</p>}
-      <ul className="flex flex-col gap-2">
-        {(items || []).map((p) => (
-          <li
-            key={p.id}
-            className={`card p-4 flex items-center gap-3 flex-wrap ${p.is_active ? "" : "opacity-55"}`}
+    <div>
+      <div className="flex gap-1 flex-wrap mb-4">
+        {MACHINE_MAINTENANCE_SUB_TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setSubTab(key)}
+            className={`px-3 py-2 rounded-full text-sm font-bold transition-colors duration-200 ${
+              subTab === key
+                ? "bg-accent text-white"
+                : "bg-muted text-primary hover:text-foreground"
+            }`}
           >
-            <div className="flex-1 min-w-0">
-              <p className="font-bold truncate">
-                {p.name}
-                {!p.is_active && (
-                  <span className="text-xs text-primary font-normal ms-2">
-                    (מושבת)
-                  </span>
-                )}
-              </p>
-              <p className="text-xs text-primary truncate">
-                {SCHEDULE_KIND_LABELS[p.schedule_kind]}
-                {p.schedule_kind === "yearly" && p.interval_years > 1
-                  ? ` · כל ${p.interval_years} שנים`
-                  : ""}
-              </p>
-            </div>
-            <ActiveToggle item={p} onToggle={() => toggleActive(p)} />
-          </li>
+            {label}
+          </button>
         ))}
-        {items?.length === 0 && (
-          <li className="card p-6 text-center text-primary">
-            אין מחזורי טיפול עדיין
-          </li>
-        )}
-        {items === null && (
-          <li className="flex justify-center py-8 text-primary">
-            <SpinnerIcon size={28} />
-          </li>
-        )}
-      </ul>
+      </div>
+
+      {subTab === "machines" && <MachinesStubSection />}
+      {subTab === "tasks" && <MaintenanceTasksTab />}
     </div>
   );
 }
@@ -2278,8 +2173,7 @@ export default function ManagerSettings() {
           {tab === "leads" && <LeadsTab />}
           {tab === "catalog" && <CatalogTab />}
           {tab === "lunch" && <LunchTab />}
-          {tab === "maintenance-periods" && <MaintenancePeriodsTab />}
-          {tab === "maintenance-tasks" && <MaintenanceTasksTab />}
+          {tab === "machine-maintenance" && <MachineMaintenanceTab />}
         </div>
       </main>
     </div>

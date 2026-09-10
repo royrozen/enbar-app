@@ -81,7 +81,7 @@ After each completed step: ✅ [what was done] — [table/object affected]
 
 ---
 
-## Phase 2 — Admin catalogs + employee access toggle
+## Phase 2 — Admin catalogs + employee access toggle *(SUPERSEDED — see Phase 2-revision below)*
 
 ```
 ## Objective
@@ -120,27 +120,117 @@ After each completed step: ✅ [what was done] — [file(s) affected]
 
 **Session Strategy:** Continue — needs Phase 1's table names and the existing employees-tab component.
 
+**This phase already ran and shipped (מחזורי טיפול tab, standalone catalogs).** Two decisions made after it shipped correct it: (1) periods are no longer admin-manageable at all, (2) a new `תלת שנתי` frequency was added with a redefined meaning. The correction is its own phase below — do not re-run this block as written.
+
+---
+
+## Phase 2-revision — Remove periods admin UI, add the triannual frequency, restructure navigation
+
+```
+## Objective
+Correct Phase 2's already-shipped output per three decisions made after it ran: (1) remove the מחזורי טיפול admin tab entirely — periods become fixed/seeded, never admin-editable; (2) add a new schedule_kind 'triannual' (תלת שנתי, 3x/year, every 4 months) and rename the existing once-per-3-years cadence to אחת לשלוש שנים so the two aren't ambiguous; (3) restructure navigation so machines, parts, and tasks all live under one new parent tab, תחזוקת מכונות, with sub-tabs מכונות and משימות תחזוקה — instead of a separate periods tab and (in the not-yet-built Phase 3) a standalone /manager/machines route.
+
+## Context
+Read PRD §6.1, §7.1-7.3, and §9's three newest resolved-decision bullets in full before starting — this phase exists specifically because those sections changed after Phase 2 shipped. Find whatever component Phase 2 built for the מחזורי טיפול tab (list+add UI) and remove it entirely, not just hide it.
+
+## Target State
+- maintenance_periods' schedule_kind CHECK now includes 'triannual'. The table is seeded with exactly four rows: שבועי (weekly), חודשי (monthly), תלת שנתי (triannual), אחת לשלוש שנים (yearly, interval_years=3) — if the earlier phase already seeded a differently-named or differently-defined row for the 3-year cadence, it is renamed/corrected, not duplicated.
+- The next-due-date helper function (from Phase 1) gains a branch for schedule_kind='triannual': computes the next occurrence as anchor_month + 4 months (wrapping year, using day_of_month as the day), applying the same Saturday-shift rule as monthly/yearly.
+- The מחזורי טיפול admin tab/component is deleted. No UI anywhere lets an admin add, edit, or deactivate a period catalog row.
+- /manager/settings gains one new top-level tab, תחזוקת מכונות, containing two sub-tabs: מכונות (empty for now — Phase 3 builds its content) and משימות תחזוקה (Phase 2's existing tasks tab, relocated under this new parent, behavior unchanged).
+- The employees-tab access toggle (Phase 2, already shipped) is untouched — it doesn't move, it was never part of this restructuring.
+
+## Scope
+- Work only in: maintenance_periods' schema/seed data, the Phase 1 next-due-date helper function, and /manager/settings' tab structure (removing the periods tab, adding the תחזוקת מכונות parent + its two sub-tabs)
+- Do NOT touch: the employees tab/toggle, any other existing admin tab, machine_periods/machine_period_tasks (Phase 3/4 haven't built their UI yet, but don't touch their table structure here either)
+
+## Constraints
+- Create a git tag before this migration (e.g. pre-period-catalog-revision) — it alters an already-seeded table's CHECK constraint and data
+- Do not leave a dangling/hidden version of the periods tab — delete the component, don't just remove it from navigation
+- Only make changes directly requested
+
+## Acceptance Criteria
+- [ ] maintenance_periods contains exactly the four rows described above, correctly named and configured, verified via a direct query
+- [ ] No admin UI path exists to add, edit, or deactivate a maintenance_periods row (confirm by reading the relevant components, not just clicking around)
+- [ ] The next-due-date helper correctly computes a triannual occurrence 4 months after a given anchor, with the Saturday-shift rule applied
+- [ ] /manager/settings shows תחזוקת מכונות as a top-level tab with מכונות and משימות תחזוקה as its sub-tabs; משימות תחזוקה behaves exactly as it did before the move
+- [ ] The employees tab and its access toggle are unaffected
+
+## Stop Conditions
+Stop and ask before:
+- Choosing a different seed set than the four rows listed above
+- Leaving any admin-facing way to modify maintenance_periods
+
+## Progress
+After each completed step: ✅ [what was done] — [file/table affected]
+```
+
+🎯 Target: Claude Code · 💡 Treats this explicitly as a correction to already-shipped work, not a fresh feature — naming the exact component to delete and the exact seed data to end up with, so the session doesn't have to infer either from the PRD's prose alone.
+
+**Session Strategy:** Continue — needs Phase 1's schema/helper function and Phase 2's shipped tab code to correct.
+
+---
+
+## Phase 2-revision-2 — Delete אחת לשלוש שנים, restore שנתי
+
+```
+## Objective
+Correct Phase 2-revision's already-shipped seed data: Roy has decided the module does not need a "once every 3 years" period at all — delete the אחת לשלוש שנים row outright, not just keep it renamed. Separately, restore a plain שנתי (once-a-year, interval_years=1) row, which was correctly part of Roy's original four-period list (שבועי/חודשי/שנתי/תלת שנתי) but was accidentally dropped from the PRD during an earlier edit and therefore never got seeded.
+
+## Context
+Read PRD §6.1, §7.1, and §9's newest resolved-decision bullet before starting — they now describe the final four-row catalog as שבועי / חודשי / שנתי / תלת שנתי, with no 3-year variant at all. Phase 2-revision (already run) seeded אחת לשלוש שנים (schedule_kind='yearly', interval_years=3) instead of a plain שנתי (interval_years=1) — that's the specific row to delete and replace.
+
+## Target State
+maintenance_periods contains exactly four rows: שבועי (weekly), חודשי (monthly), שנתי (yearly, interval_years=1), תלת שנתי (triannual). The אחת לשלוש שנים / interval_years=3 row no longer exists. If any machine_periods row was already assigned to the deleted period (unlikely this early, but check), stop and ask rather than deleting it silently — a period assignment with real due-date history is not the same kind of change as an unused catalog row.
+
+## Scope
+- Work only in: maintenance_periods' seed data (delete one row, insert one replacement)
+- Do NOT touch: the schedule_kind CHECK constraint, the next-due-date helper, any admin UI (none of that changes for this correction — 'yearly' already exists as a schedule_kind, only the seeded row's interval_years and name change)
+
+## Constraints
+- If any machine_periods row already references the אחת לשלוש שנים catalog row, stop and ask before deleting anything
+- Only make changes directly requested
+- No admin UI change needed or wanted — this is a data-only correction
+
+## Acceptance Criteria
+- [ ] maintenance_periods contains exactly the four rows described above, verified via a direct query
+- [ ] No machine_periods row references a now-deleted period (checked before deleting, not after)
+- [ ] No schema, helper function, or UI change was made — this phase touches seed data only
+
+## Stop Conditions
+Stop and ask before:
+- Deleting a period row that has any machine_periods rows referencing it
+
+## Progress
+After each completed step: ✅ [what was done] — [table affected]
+```
+
+🎯 Target: Claude Code · 💡 Explicitly separates "delete a catalog row" from "delete a catalog row something already depends on" as a stop condition, since Phase 3 (machine period assignment) hasn't run yet but this phase shouldn't assume that — it should check, not assume.
+
+**Session Strategy:** Continue — needs Phase 2-revision's seed data to correct. Run before Phase 3, since Phase 3 will offer the period list to admins for the first time.
+
 ---
 
 ## Phase 3 — Machine management
 
 ```
 ## Objective
-Build a new /manager/machines admin area: machine list, add/edit, per-machine period assignment, and QR generation/display, per PRD §7.2.
+Build the מכונות sub-tab (under the תחזוקת מכונות parent tab created in Phase 2-revision): machine list, add/edit, per-machine period assignment, and QR generation/display, per PRD §7.1.
 
 ## Context
-Search the codebase for the existing manager-area routing pattern and for an existing QR-generation dependency; if none exists, check package.json before adding one.
+Search the codebase for the existing manager-area tab/sub-tab pattern (used by, e.g., the lunch-ordering sub-tabs under the employees tab, and the new תחזוקת מכונות parent from Phase 2-revision) and for an existing QR-generation dependency; if none exists, check package.json before adding one. Period selection in this phase's UI must read from the fixed four-row maintenance_periods list (Phase 2-revision) — there is no "add a period" action anywhere in this phase either.
 
 ## Target State
-/manager/machines lists machines with #{machine_no} (zero-padded), name, location, active toggle. Add/edit works. Within a machine's detail, periods can be attached with the correct anchor input per schedule_kind, and tasks can be attached per period. Saving a period assignment computes its initial next_due_date via the Phase 1 helper (Saturday-shift applied). A QR encoding the machine's UUID (never machine_no) is generated and displayed for printing immediately on machine creation.
+The מכונות sub-tab lists machines with #{machine_no} (zero-padded), name, location, active toggle. Add/edit works. Within a machine's detail, one of the four fixed periods can be attached, with the correct anchor input shown per its schedule_kind (weekday picker for weekly, day-of-month for monthly, month+day for triannual and yearly), and tasks from the maintenance_tasks catalog can be attached per period. Saving a period assignment computes its initial next_due_date via the Phase 1/Phase 2-revision helper (Saturday-shift applied, triannual branch included). A QR encoding the machine's UUID (never machine_no) is generated and displayed for printing immediately on machine creation.
 
 ## Scope
-- Work only in: a new /manager/machines route and its components
-- Do NOT touch: any existing manager route
+- Work only in: the מכונות sub-tab under תחזוקת מכונות (not a standalone /manager/machines route — v1 of this phase assumed that structure, it's superseded by Phase 2-revision's navigation change)
+- Do NOT touch: any other existing manager route or sub-tab
 
 ## Constraints
 - QR payload MUST be machines.id (uuid), never machine_no
 - weekday options must only offer Sunday-Friday
+- No UI action to add/edit/deactivate a period — periods are picked from the fixed four, never created
 - Check package.json before adding any new dependency
 - Only make changes directly requested
 
@@ -148,21 +238,23 @@ Search the codebase for the existing manager-area routing pattern and for an exi
 - [ ] Creating a machine immediately shows a printable QR
 - [ ] Decoding that QR yields the machine's UUID, not its display number
 - [ ] Weekly period attachment only allows Sunday-Friday as anchor day
-- [ ] Monthly/yearly attachment shows the correct anchor input
+- [ ] Monthly/triannual/yearly attachment shows the correct anchor input for each
+- [ ] The period picker offers exactly the four fixed rows, with no way to add a fifth
 - [ ] Tasks attached to a machine period persist and reload correctly
 
 ## Stop Conditions
 Stop and ask before:
 - Adding any new npm dependency
 - Using machine_no anywhere in a URL, route param, or QR payload
+- Building this as a standalone route instead of the מכונות sub-tab
 
 ## Progress
 After each completed step: ✅ [what was done] — [file(s) affected]
 ```
 
-🎯 Target: Claude Code · 💡 Unchanged from v1 — this phase wasn't affected by the auth-model correction.
+🎯 Target: Claude Code · 💡 Updated for the navigation restructuring and the fourth period kind — the QR/UUID guardrail carries over unchanged from the original version.
 
-**Session Strategy:** Continue — needs Phase 1 schema and Phase 2's admin-tab conventions.
+**Session Strategy:** Continue — needs Phase 1 schema, Phase 2's admin-tab conventions, and Phase 2-revision's new תחזוקת מכונות parent tab and fixed period list.
 
 ---
 
