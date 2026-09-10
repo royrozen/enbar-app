@@ -14,6 +14,8 @@ import {
   ChevronDownIcon,
   RefreshIcon,
   DownloadIcon,
+  CalendarIcon,
+  ClipboardIcon,
 } from "../components/Icons";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/AuthContext";
@@ -32,6 +34,8 @@ const TABS = [
   { key: "leads", label: "ראשי צוות", Icon: HardHatIcon },
   { key: "catalog", label: "קטלוג חלקים", Icon: PackageIcon },
   { key: "lunch", label: "עובדים", Icon: HardHatIcon },
+  { key: "maintenance-periods", label: "מחזורי טיפול", Icon: CalendarIcon },
+  { key: "maintenance-tasks", label: "משימות תחזוקה", Icon: ClipboardIcon },
 ];
 
 function ActiveToggle({ item, onToggle, busy }) {
@@ -53,6 +57,36 @@ function ActiveToggle({ item, onToggle, busy }) {
           ? "הפריט יוסתר מהרשימות אך ההיסטוריה תישמר"
           : "החזרת הפריט לרשימות"
       }
+    >
+      <span className="inline-block h-3 w-3 rounded-full bg-white shadow" />
+    </button>
+  );
+}
+
+// Phase 2 (maintenance module) — per-employee "גישה למודול תחזוקה" toggle.
+// Reachability is already restricted to factory_manager/platform_admin: this
+// component only renders inside /manager/settings, which RequireFactoryManager
+// gates to those two roles, and the underlying employees UPDATE policy enforces
+// the same restriction server-side regardless of UI.
+function MaintenanceAccessToggle({ item, onToggle, busy }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={item.maintenance_access_enabled}
+      aria-label={
+        item.maintenance_access_enabled
+          ? "ביטול גישה למודול תחזוקה"
+          : "הפעלת גישה למודול תחזוקה"
+      }
+      className={`inline-flex h-5 w-8 shrink-0 items-center rounded-full border px-0.5 transition-colors duration-200 ${
+        item.maintenance_access_enabled
+          ? "justify-end border-accent bg-accent"
+          : "justify-start border-border bg-muted"
+      } ${busy ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+      disabled={busy}
+      onClick={onToggle}
+      title="גישה למודול תחזוקה"
     >
       <span className="inline-block h-3 w-3 rounded-full bg-white shadow" />
     </button>
@@ -1210,6 +1244,260 @@ function CatalogTab() {
   );
 }
 
+// Phase 2 (maintenance module): list+add, deactivate-only — no edit, no hard
+// delete, per the implementation plan's explicit stop condition for this phase.
+function MaintenanceTasksTab() {
+  const { items, error, load, toggleActive } = useAdminList("maintenance_tasks");
+  const [showAdd, setShowAdd] = useState(false);
+  const [name, setName] = useState("");
+  const [formError, setFormError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function add(e) {
+    e.preventDefault();
+    if (!name.trim()) {
+      setFormError("יש להזין שם משימה");
+      return;
+    }
+    setFormError("");
+    setBusy(true);
+    const { error: err } = await supabase
+      .from("maintenance_tasks")
+      .insert({ name: name.trim() });
+    setBusy(false);
+    if (err) {
+      setFormError("הוספת המשימה נכשלה — נסו שוב");
+      return;
+    }
+    setName("");
+    setShowAdd(false);
+    load();
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {!showAdd ? (
+        <div>
+          <button className="btn btn-accent" onClick={() => setShowAdd(true)}>
+            <PlusIcon size={18} />
+            הוספת משימה
+          </button>
+        </div>
+      ) : (
+        <form onSubmit={add} className="card p-4">
+          <h3 className="font-bold mb-3">הוספת משימת תחזוקה</h3>
+          <div className="flex gap-2 items-start flex-wrap">
+            <div className="flex-1 min-w-[220px]">
+              <input
+                className="input"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="שם המשימה"
+                aria-label="שם המשימה"
+                autoFocus
+              />
+              {formError && <p className="err">{formError}</p>}
+            </div>
+            <button className="btn btn-accent" disabled={busy}>
+              {busy ? <SpinnerIcon size={18} /> : <PlusIcon size={18} />}
+              הוספה
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={busy}
+              onClick={() => setShowAdd(false)}
+            >
+              ביטול
+            </button>
+          </div>
+        </form>
+      )}
+
+      {error && <p className="err">{error}</p>}
+      <ul className="flex flex-col gap-2">
+        {(items || []).map((t) => (
+          <li
+            key={t.id}
+            className={`card p-4 flex items-center gap-3 flex-wrap ${t.is_active ? "" : "opacity-55"}`}
+          >
+            <p className="flex-1 font-bold truncate">
+              {t.name}
+              {!t.is_active && (
+                <span className="text-xs text-primary font-normal ms-2">
+                  (מושבת)
+                </span>
+              )}
+            </p>
+            <ActiveToggle item={t} onToggle={() => toggleActive(t)} />
+          </li>
+        ))}
+        {items?.length === 0 && (
+          <li className="card p-6 text-center text-primary">
+            אין משימות תחזוקה עדיין
+          </li>
+        )}
+        {items === null && (
+          <li className="flex justify-center py-8 text-primary">
+            <SpinnerIcon size={28} />
+          </li>
+        )}
+      </ul>
+    </div>
+  );
+}
+
+const SCHEDULE_KIND_LABELS = {
+  weekly: "שבועי",
+  monthly: "חודשי",
+  yearly: "שנתי",
+};
+
+// Phase 2 (maintenance module): list+add, deactivate-only — no edit, no hard
+// delete, per the implementation plan's explicit stop condition for this phase.
+function MaintenancePeriodsTab() {
+  const { items, error, load, toggleActive } = useAdminList("maintenance_periods");
+  const [showAdd, setShowAdd] = useState(false);
+  const [name, setName] = useState("");
+  const [scheduleKind, setScheduleKind] = useState("weekly");
+  const [intervalYears, setIntervalYears] = useState(1);
+  const [formError, setFormError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function add(e) {
+    e.preventDefault();
+    if (!name.trim()) {
+      setFormError("יש להזין שם מחזור");
+      return;
+    }
+    setFormError("");
+    setBusy(true);
+    const { error: err } = await supabase.from("maintenance_periods").insert({
+      name: name.trim(),
+      schedule_kind: scheduleKind,
+      interval_years: scheduleKind === "yearly" ? Number(intervalYears) || 1 : 1,
+    });
+    setBusy(false);
+    if (err) {
+      setFormError("הוספת המחזור נכשלה — נסו שוב");
+      return;
+    }
+    setName("");
+    setScheduleKind("weekly");
+    setIntervalYears(1);
+    setShowAdd(false);
+    load();
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {!showAdd ? (
+        <div>
+          <button className="btn btn-accent" onClick={() => setShowAdd(true)}>
+            <PlusIcon size={18} />
+            הוספת מחזור טיפול
+          </button>
+        </div>
+      ) : (
+        <form onSubmit={add} className="card p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <h3 className="font-bold sm:col-span-3">הוספת מחזור טיפול</h3>
+          <div>
+            <label className="label !text-xs">שם המחזור *</label>
+            <input
+              className="input"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="למשל: שבועי"
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="label !text-xs">תדירות *</label>
+            <select
+              className="input"
+              value={scheduleKind}
+              onChange={(e) => setScheduleKind(e.target.value)}
+              aria-label="תדירות"
+            >
+              {Object.entries(SCHEDULE_KIND_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {scheduleKind === "yearly" && (
+            <div>
+              <label className="label !text-xs">מרווח בשנים</label>
+              <input
+                type="number"
+                min={1}
+                className="input"
+                value={intervalYears}
+                onChange={(e) => setIntervalYears(e.target.value)}
+                placeholder="1 = שנתי, 3 = תלת שנתי"
+              />
+            </div>
+          )}
+          {formError && <p className="err sm:col-span-3">{formError}</p>}
+          <div className="sm:col-span-3 flex gap-2">
+            <button className="btn btn-accent" disabled={busy}>
+              {busy ? <SpinnerIcon size={18} /> : <PlusIcon size={18} />}
+              הוספה
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={busy}
+              onClick={() => setShowAdd(false)}
+            >
+              ביטול
+            </button>
+          </div>
+        </form>
+      )}
+
+      {error && <p className="err">{error}</p>}
+      <ul className="flex flex-col gap-2">
+        {(items || []).map((p) => (
+          <li
+            key={p.id}
+            className={`card p-4 flex items-center gap-3 flex-wrap ${p.is_active ? "" : "opacity-55"}`}
+          >
+            <div className="flex-1 min-w-0">
+              <p className="font-bold truncate">
+                {p.name}
+                {!p.is_active && (
+                  <span className="text-xs text-primary font-normal ms-2">
+                    (מושבת)
+                  </span>
+                )}
+              </p>
+              <p className="text-xs text-primary truncate">
+                {SCHEDULE_KIND_LABELS[p.schedule_kind]}
+                {p.schedule_kind === "yearly" && p.interval_years > 1
+                  ? ` · כל ${p.interval_years} שנים`
+                  : ""}
+              </p>
+            </div>
+            <ActiveToggle item={p} onToggle={() => toggleActive(p)} />
+          </li>
+        ))}
+        {items?.length === 0 && (
+          <li className="card p-6 text-center text-primary">
+            אין מחזורי טיפול עדיין
+          </li>
+        )}
+        {items === null && (
+          <li className="flex justify-center py-8 text-primary">
+            <SpinnerIcon size={28} />
+          </li>
+        )}
+      </ul>
+    </div>
+  );
+}
+
 // Reusable <details> section with optional action button in the header.
 // Uses native open/toggle behavior while still allowing controlled state.
 function CollapsibleSection({
@@ -1254,7 +1542,7 @@ function CollapsibleSection({
 function LunchEmployeesSection() {
   const { items, error, setError, load, toggleActive } = useAdminList(
     "employees",
-    "id, name, phone, is_active, created_at",
+    "id, name, phone, is_active, maintenance_access_enabled, created_at",
   );
   const [showAdd, setShowAdd] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -1267,6 +1555,22 @@ function LunchEmployeesSection() {
   const [editForm, setEditForm] = useState({ name: "", phone: "" });
   const [editError, setEditError] = useState("");
   const [editBusy, setEditBusy] = useState(false);
+
+  const [maintenanceAccessBusyId, setMaintenanceAccessBusyId] = useState(null);
+
+  async function toggleMaintenanceAccess(item) {
+    setMaintenanceAccessBusyId(item.id);
+    const { error: err } = await supabase
+      .from("employees")
+      .update({ maintenance_access_enabled: !item.maintenance_access_enabled })
+      .eq("id", item.id);
+    setMaintenanceAccessBusyId(null);
+    if (err) {
+      setError("העדכון נכשל — נסו שוב");
+      return;
+    }
+    load();
+  }
 
   async function add(e) {
     e.preventDefault();
@@ -1484,6 +1788,14 @@ function LunchEmployeesSection() {
                   >
                     <PencilIcon size={16} />
                   </button>
+                  <span className="flex items-center gap-1.5 text-xs text-primary">
+                    גישה לתחזוקה
+                    <MaintenanceAccessToggle
+                      item={item}
+                      onToggle={() => toggleMaintenanceAccess(item)}
+                      busy={maintenanceAccessBusyId === item.id}
+                    />
+                  </span>
                   <ActiveToggle
                     item={item}
                     onToggle={() => toggleActive(item)}
@@ -1966,6 +2278,8 @@ export default function ManagerSettings() {
           {tab === "leads" && <LeadsTab />}
           {tab === "catalog" && <CatalogTab />}
           {tab === "lunch" && <LunchTab />}
+          {tab === "maintenance-periods" && <MaintenancePeriodsTab />}
+          {tab === "maintenance-tasks" && <MaintenanceTasksTab />}
         </div>
       </main>
     </div>

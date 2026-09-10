@@ -42,13 +42,13 @@ function RequireManager({ children }) {
   return children
 }
 
-// Admin area — factory manager only. Installation manager is redirected to the dashboard.
+// Admin area — factory manager or platform admin only.
 function RequireFactoryManager({ children }) {
   const { session, profile, loading } = useAuth()
   if (loading) return <AuthLoading />
   if (!session || !profile) return <Navigate to="/" replace />
   if (profile.role === 'team_lead') return <Navigate to="/home" replace />
-  if (profile.role !== 'factory_manager') return <Navigate to="/manager" replace />
+  if (profile.role !== 'factory_manager' && profile.role !== 'platform_admin') return <Navigate to="/manager" replace />
   return children
 }
 
