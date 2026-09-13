@@ -12,6 +12,7 @@ export const PHOTO_BUCKET = 'report-photos'
 export const SIGNED_DOC_BUCKET = 'signed-approvals'
 export const EXCEPTION_PHOTO_BUCKET = 'exception-photos'
 export const EXCEPTION_DOC_BUCKET = 'exception-docs'
+export const PART_PHOTO_BUCKET = 'machine-parts'
 
 export const IN_APP_EXPIRY = 300 // 5 min — viewed immediately after generation
 export const SHARE_EXPIRY = 86400 // 24h — baked into a WhatsApp message opened later
@@ -44,6 +45,10 @@ export function exceptionPhotoUrl(storagePath) {
 
 export function exceptionDocUrl(storagePath) {
   return supabase.storage.from(EXCEPTION_DOC_BUCKET).getPublicUrl(storagePath).data.publicUrl
+}
+
+export function machinePartPhotoUrl(storagePath) {
+  return supabase.storage.from(PART_PHOTO_BUCKET).getPublicUrl(storagePath).data.publicUrl
 }
 
 // Single active team lead in Phase 1 — reports are attributed automatically.

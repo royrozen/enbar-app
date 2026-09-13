@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import QRCode from "qrcode";
 import { useSearchParams } from "react-router-dom";
 import Header from "../components/Header";
 import {
@@ -15,8 +16,10 @@ import {
   RefreshIcon,
   DownloadIcon,
   FactoryIcon,
+  CameraIcon,
 } from "../components/Icons";
-import { supabase } from "../lib/supabase";
+import { supabase, PART_PHOTO_BUCKET, machinePartPhotoUrl } from "../lib/supabase";
+import imageCompression from "browser-image-compression";
 import { useAuth } from "../lib/AuthContext";
 import {
   normalizeEmployeePhone,
@@ -1242,34 +1245,1049 @@ function CatalogTab() {
   );
 }
 
-// Phase 2 (maintenance module): list+add, deactivate-only — no edit, no hard
-// delete, per the implementation plan's explicit stop condition for this phase.
-function MaintenanceTasksTab() {
-  const { items, error, load, toggleActive } = useAdminList("maintenance_tasks");
-  const [showAdd, setShowAdd] = useState(false);
-  const [name, setName] = useState("");
-  const [formError, setFormError] = useState("");
+// Phase 3: תחזוקת מכונות — machine list, add/edit, per-machine period
+// assignment with inline machine-owned tasks (§6.3 — task_name is plain
+// text, never a shared catalog), and QR display (machines.id, never
+// machine_no — §9 storage/route guardrail).
+
+const WEEKDAY_LABELS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי"]; // 0-5, Sun-Fri only
+
+function describeAnchor(mp, kind) {
+  if (kind === "weekly") return `יום ${WEEKDAY_LABELS[mp.weekday] || ""}`;
+  if (kind === "monthly") return `ה-${mp.day_of_month} לחודש`;
+  if (kind === "triannual" || kind === "yearly")
+    return `${mp.anchor_day}/${mp.anchor_month}`;
+  return "";
+}
+
+function MachineQr({ machineId, machineNo }) {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    if (canvasRef.current) {
+      QRCode.toCanvas(canvasRef.current, machineId, { width: 160, margin: 1 });
+    }
+  }, [machineId]);
+
+  function download() {
+    const a = document.createElement("a");
+    a.href = canvasRef.current.toDataURL("image/png");
+    a.download = `machine-${String(machineNo).padStart(3, "0")}-qr.png`;
+    a.click();
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-2 shrink-0">
+      <canvas ref={canvasRef} className="rounded-lg border border-border" />
+      <button
+        type="button"
+        className="btn btn-outline text-sm !min-h-[34px]"
+        onClick={download}
+      >
+        <DownloadIcon size={16} />
+        הורדת QR להדפסה
+      </button>
+    </div>
+  );
+}
+
+function TaskRow({ task, onSaved, onDeleted }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(task.task_name);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save() {
+    if (!value.trim()) {
+      setError("יש להזין טקסט משימה");
+      return;
+    }
+    setBusy(true);
+    const { error: err } = await supabase
+      .from("machine_period_tasks")
+      .update({ task_name: value.trim() })
+      .eq("id", task.id);
+    setBusy(false);
+    if (err) {
+      setError("השמירה נכשלה — נסו שוב");
+      return;
+    }
+    setEditing(false);
+    onSaved(value.trim());
+  }
+
+  async function remove() {
+    setBusy(true);
+    const { error: err } = await supabase
+      .from("machine_period_tasks")
+      .delete()
+      .eq("id", task.id);
+    setBusy(false);
+    if (!err) onDeleted();
+  }
+
+  if (editing) {
+    return (
+      <li className="flex items-center gap-2">
+        <input
+          className="input !min-h-[30px] flex-1"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          autoFocus
+        />
+        <button
+          className="btn btn-outline text-sm !min-h-[30px]"
+          disabled={busy}
+          onClick={save}
+          aria-label="שמירה"
+        >
+          {busy ? <SpinnerIcon size={14} /> : <CheckIcon size={14} />}
+        </button>
+        <button
+          className="btn btn-ghost text-sm !min-h-[30px]"
+          disabled={busy}
+          onClick={() => {
+            setEditing(false);
+            setValue(task.task_name);
+            setError("");
+          }}
+          aria-label="ביטול"
+        >
+          <XIcon size={14} />
+        </button>
+        {error && <p className="err w-full">{error}</p>}
+      </li>
+    );
+  }
+
+  return (
+    <li className="flex items-center gap-2 group">
+      <span className="flex-1 text-sm">{task.task_name}</span>
+      <button
+        className="btn btn-ghost text-sm !min-h-[28px] !p-1.5"
+        onClick={() => setEditing(true)}
+        aria-label="עריכה"
+      >
+        <PencilIcon size={14} />
+      </button>
+      <button
+        className="btn btn-ghost text-sm !min-h-[28px] !p-1.5 hover:!text-destructive"
+        disabled={busy}
+        onClick={remove}
+        aria-label="מחיקה"
+      >
+        {busy ? <SpinnerIcon size={14} /> : <TrashIcon size={14} />}
+      </button>
+    </li>
+  );
+}
+
+function AddTaskForm({ machinePeriodId, sortOrder, taskNameOptions, onAdded }) {
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const listId = `task-names-${machinePeriodId}`;
 
   async function add(e) {
     e.preventDefault();
-    if (!name.trim()) {
-      setFormError("יש להזין שם משימה");
+    if (!value.trim()) {
+      setError("יש להזין טקסט משימה");
       return;
     }
-    setFormError("");
     setBusy(true);
-    const { error: err } = await supabase
-      .from("maintenance_tasks")
-      .insert({ name: name.trim() });
+    const { error: err } = await supabase.from("machine_period_tasks").insert({
+      machine_period_id: machinePeriodId,
+      task_name: value.trim(),
+      sort_order: sortOrder,
+    });
     setBusy(false);
     if (err) {
-      setFormError("הוספת המשימה נכשלה — נסו שוב");
+      setError("ההוספה נכשלה — נסו שוב");
       return;
     }
-    setName("");
-    setShowAdd(false);
+    onAdded(value.trim());
+    setValue("");
+  }
+
+  return (
+    <form onSubmit={add} className="flex items-center gap-2 mt-1">
+      <input
+        className="input !min-h-[30px] flex-1"
+        list={listId}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="הוספת משימה"
+      />
+      <datalist id={listId}>
+        {taskNameOptions.map((n) => (
+          <option key={n} value={n} />
+        ))}
+      </datalist>
+      <button
+        className="btn btn-outline text-sm !min-h-[30px]"
+        disabled={busy}
+        aria-label="הוספת משימה"
+      >
+        {busy ? <SpinnerIcon size={14} /> : <PlusIcon size={14} />}
+      </button>
+      {error && <p className="err">{error}</p>}
+    </form>
+  );
+}
+
+function PeriodCard({ period, taskNameOptions, onChanged }) {
+  const kind = period.maintenance_periods.schedule_kind;
+  const tasks = [...period.machine_period_tasks].sort(
+    (a, b) => a.sort_order - b.sort_order,
+  );
+
+  return (
+    <div className="rounded-lg border border-border p-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+        <p className="font-bold text-sm">{period.maintenance_periods.name}</p>
+        <p className="text-xs text-primary">
+          {describeAnchor(period, kind)} · תאריך יעד הבא:{" "}
+          {formatDate(period.next_due_date)}
+        </p>
+      </div>
+      <ul className="flex flex-col gap-1">
+        {tasks.map((t) => (
+          <TaskRow
+            key={t.id}
+            task={t}
+            onSaved={onChanged}
+            onDeleted={onChanged}
+          />
+        ))}
+        {tasks.length === 0 && (
+          <li className="text-xs text-primary">אין משימות עדיין</li>
+        )}
+      </ul>
+      <AddTaskForm
+        machinePeriodId={period.id}
+        sortOrder={tasks.length}
+        taskNameOptions={taskNameOptions}
+        onAdded={onChanged}
+      />
+    </div>
+  );
+}
+
+const emptyPeriodAnchor = {
+  period_id: "",
+  weekday: 0,
+  day_of_month: 1,
+  anchor_month: 1,
+  anchor_day: 1,
+};
+
+function AddPeriodForm({ machineId, availablePeriods, onAdded }) {
+  const [form, setForm] = useState(emptyPeriodAnchor);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const selected = availablePeriods.find((p) => p.id === form.period_id);
+  const kind = selected?.schedule_kind;
+
+  async function add(e) {
+    e.preventDefault();
+    if (!form.period_id) {
+      setError("יש לבחור מחזור טיפול");
+      return;
+    }
+    setBusy(true);
+    const { data: dueDate, error: rpcErr } = await supabase.rpc(
+      "compute_next_due_date",
+      {
+        p_schedule_kind: kind,
+        p_current_due: todayISO(),
+        p_weekday: kind === "weekly" ? form.weekday : null,
+        p_day_of_month: kind === "monthly" ? form.day_of_month : null,
+        p_anchor_month:
+          kind === "triannual" || kind === "yearly" ? form.anchor_month : null,
+        p_anchor_day:
+          kind === "triannual" || kind === "yearly" ? form.anchor_day : null,
+        p_interval_years: selected.interval_years,
+      },
+    );
+    if (rpcErr) {
+      setBusy(false);
+      setError("חישוב תאריך היעד נכשל — נסו שוב");
+      return;
+    }
+    const { error: err } = await supabase.from("machine_periods").insert({
+      machine_id: machineId,
+      period_id: form.period_id,
+      weekday: kind === "weekly" ? form.weekday : null,
+      day_of_month: kind === "monthly" ? form.day_of_month : null,
+      anchor_month:
+        kind === "triannual" || kind === "yearly" ? form.anchor_month : null,
+      anchor_day:
+        kind === "triannual" || kind === "yearly" ? form.anchor_day : null,
+      next_due_date: dueDate,
+    });
+    setBusy(false);
+    if (err) {
+      setError("ההוספה נכשלה — נסו שוב");
+      return;
+    }
+    setForm(emptyPeriodAnchor);
+    onAdded();
+  }
+
+  if (availablePeriods.length === 0) return null;
+
+  return (
+    <form
+      onSubmit={add}
+      className="rounded-lg border border-dashed border-border p-3 flex items-center gap-2 flex-wrap"
+    >
+      <select
+        className="input !min-h-[30px] !w-auto shrink-0"
+        value={form.period_id}
+        onChange={(e) =>
+          setForm((f) => ({ ...f, period_id: e.target.value }))
+        }
+      >
+        <option value="">הוספת מחזור טיפול</option>
+        {availablePeriods.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+
+      {kind === "weekly" && (
+        <select
+          className="input !min-h-[30px] !w-auto shrink-0"
+          value={form.weekday}
+          onChange={(e) =>
+            setForm((f) => ({ ...f, weekday: Number(e.target.value) }))
+          }
+        >
+          {WEEKDAY_LABELS.map((label, i) => (
+            <option key={i} value={i}>
+              יום {label}
+            </option>
+          ))}
+        </select>
+      )}
+
+      {kind === "monthly" && (
+        <input
+          type="number"
+          min={1}
+          max={28}
+          className="input !min-h-[30px] !w-20"
+          value={form.day_of_month}
+          onChange={(e) =>
+            setForm((f) => ({ ...f, day_of_month: Number(e.target.value) }))
+          }
+          aria-label="יום בחודש"
+        />
+      )}
+
+      {(kind === "triannual" || kind === "yearly") && (
+        <>
+          <input
+            type="number"
+            min={1}
+            max={12}
+            className="input !min-h-[30px] !w-16"
+            value={form.anchor_month}
+            onChange={(e) =>
+              setForm((f) => ({
+                ...f,
+                anchor_month: Number(e.target.value),
+              }))
+            }
+            aria-label="חודש"
+          />
+          <input
+            type="number"
+            min={1}
+            max={28}
+            className="input !min-h-[30px] !w-16"
+            value={form.anchor_day}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, anchor_day: Number(e.target.value) }))
+            }
+            aria-label="יום"
+          />
+        </>
+      )}
+
+      <button className="btn btn-outline text-sm !min-h-[30px]" disabled={busy}>
+        {busy ? <SpinnerIcon size={14} /> : <PlusIcon size={14} />}
+        הוספה
+      </button>
+      {error && <p className="err w-full">{error}</p>}
+    </form>
+  );
+}
+
+// Phase 4: parts catalog, per machine. Photo compression mirrors the
+// existing report/exception photo-upload pattern (browser-image-compression,
+// same options), machine-parts is a public bucket like exception-photos.
+const emptyPartForm = {
+  name: "",
+  store_name: "",
+  store_phone: "",
+  store_sku: "",
+  purchase_price: "",
+  purchase_date: "",
+  shelf_location: "",
+  quantity: "",
+};
+
+function partFormToRow(form) {
+  return {
+    name: form.name.trim(),
+    store_name: form.store_name.trim() || null,
+    store_phone: form.store_phone.trim() || null,
+    store_sku: form.store_sku.trim() || null,
+    purchase_price: form.purchase_price === "" ? null : Number(form.purchase_price),
+    purchase_date: form.purchase_date || null,
+    shelf_location: form.shelf_location.trim() || null,
+    quantity: form.quantity === "" ? null : Number(form.quantity),
+  };
+}
+
+async function compressPartPhoto(file) {
+  try {
+    return await imageCompression(file, {
+      maxWidthOrHeight: 1600,
+      maxSizeMB: 1.2,
+      useWebWorker: true,
+      fileType: "image/jpeg",
+      initialQuality: 0.85,
+    });
+  } catch {
+    return file;
+  }
+}
+
+function PartPhotoPicker({ preview, onChange }) {
+  const inputRef = useRef(null);
+
+  async function handleFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const compressed = await compressPartPhoto(file);
+    onChange(compressed);
+  }
+
+  return (
+    <div className="shrink-0">
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        className="w-16 h-16 rounded-lg border-2 border-dashed border-border bg-white text-primary hover:border-accent hover:text-accent transition-colors flex items-center justify-center overflow-hidden"
+        aria-label="בחירת תמונה"
+      >
+        {preview ? (
+          <img src={preview} alt="" className="w-full h-full object-cover" />
+        ) : (
+          <CameraIcon size={22} />
+        )}
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFile}
+      />
+    </div>
+  );
+}
+
+function PartForm({ machineId, initial, onDone, onCancel, submitLabel }) {
+  const [form, setForm] = useState(initial || emptyPartForm);
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(
+    initial?.photo_storage_path
+      ? machinePartPhotoUrl(initial.photo_storage_path)
+      : null,
+  );
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  function pickPhoto(file) {
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  }
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!form.name.trim()) {
+      setError("יש להזין שם חלק");
+      return;
+    }
+    setBusy(true);
+    const row = partFormToRow(form);
+
+    if (initial?.id) {
+      const { error: err } = await supabase
+        .from("machine_parts")
+        .update(row)
+        .eq("id", initial.id);
+      if (err) {
+        setBusy(false);
+        setError("השמירה נכשלה — נסו שוב");
+        return;
+      }
+      if (photoFile) {
+        const path = `parts/${initial.id}/${crypto.randomUUID()}.jpg`;
+        const { error: upErr } = await supabase.storage
+          .from(PART_PHOTO_BUCKET)
+          .upload(path, photoFile, { contentType: "image/jpeg" });
+        if (!upErr) {
+          await supabase
+            .from("machine_parts")
+            .update({ photo_storage_path: path })
+            .eq("id", initial.id);
+        }
+      }
+    } else {
+      const { data: part, error: err } = await supabase
+        .from("machine_parts")
+        .insert({ machine_id: machineId, ...row })
+        .select()
+        .single();
+      if (err) {
+        setBusy(false);
+        setError("ההוספה נכשלה — נסו שוב");
+        return;
+      }
+      if (photoFile) {
+        const path = `parts/${part.id}/${crypto.randomUUID()}.jpg`;
+        const { error: upErr } = await supabase.storage
+          .from(PART_PHOTO_BUCKET)
+          .upload(path, photoFile, { contentType: "image/jpeg" });
+        if (!upErr) {
+          await supabase
+            .from("machine_parts")
+            .update({ photo_storage_path: path })
+            .eq("id", part.id);
+        }
+      }
+    }
+    setBusy(false);
+    onDone();
+  }
+
+  return (
+    <form
+      onSubmit={submit}
+      className="rounded-lg border border-border p-3 grid grid-cols-1 sm:grid-cols-2 gap-3"
+    >
+      <div className="sm:col-span-2 flex items-start gap-3">
+        <PartPhotoPicker preview={photoPreview} onChange={pickPhoto} />
+        <div className="flex-1">
+          <label className="label !text-xs">שם החלק *</label>
+          <input
+            className="input !min-h-[36px]"
+            value={form.name}
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            autoFocus
+          />
+        </div>
+      </div>
+      <div>
+        <label className="label !text-xs">כמות</label>
+        <input
+          type="number"
+          min={0}
+          className="input !min-h-[36px]"
+          value={form.quantity}
+          onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
+        />
+      </div>
+      <div>
+        <label className="label !text-xs">מיקום מדף</label>
+        <input
+          className="input !min-h-[36px]"
+          value={form.shelf_location}
+          onChange={(e) =>
+            setForm((f) => ({ ...f, shelf_location: e.target.value }))
+          }
+        />
+      </div>
+      <div>
+        <label className="label !text-xs">שם ספק</label>
+        <input
+          className="input !min-h-[36px]"
+          value={form.store_name}
+          onChange={(e) =>
+            setForm((f) => ({ ...f, store_name: e.target.value }))
+          }
+        />
+      </div>
+      <div>
+        <label className="label !text-xs">טלפון ספק</label>
+        <input
+          className="input !min-h-[36px]"
+          dir="ltr"
+          value={form.store_phone}
+          onChange={(e) =>
+            setForm((f) => ({ ...f, store_phone: e.target.value }))
+          }
+        />
+      </div>
+      <div>
+        <label className="label !text-xs">מק״ט ספק</label>
+        <input
+          className="input !min-h-[36px]"
+          dir="ltr"
+          value={form.store_sku}
+          onChange={(e) =>
+            setForm((f) => ({ ...f, store_sku: e.target.value }))
+          }
+        />
+      </div>
+      <div>
+        <label className="label !text-xs">מחיר רכישה</label>
+        <input
+          type="number"
+          min={0}
+          step="0.01"
+          className="input !min-h-[36px]"
+          value={form.purchase_price}
+          onChange={(e) =>
+            setForm((f) => ({ ...f, purchase_price: e.target.value }))
+          }
+        />
+      </div>
+      <div>
+        <label className="label !text-xs">תאריך רכישה</label>
+        <input
+          type="date"
+          className="input !min-h-[36px]"
+          value={form.purchase_date}
+          onChange={(e) =>
+            setForm((f) => ({ ...f, purchase_date: e.target.value }))
+          }
+        />
+      </div>
+      {error && <p className="err sm:col-span-2">{error}</p>}
+      <div className="sm:col-span-2 flex gap-2">
+        <button className="btn btn-accent text-sm !min-h-[34px]" disabled={busy}>
+          {busy ? <SpinnerIcon size={16} /> : <CheckIcon size={16} />}
+          {submitLabel}
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost text-sm !min-h-[34px]"
+          disabled={busy}
+          onClick={onCancel}
+        >
+          ביטול
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function PartRow({ part, onChanged }) {
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
+  async function toggleActive() {
+    setBusy(true);
+    await supabase
+      .from("machine_parts")
+      .update({ is_active: !part.is_active })
+      .eq("id", part.id);
+    setBusy(false);
+    onChanged();
+  }
+
+  async function remove() {
+    setDeleteBusy(true);
+    await supabase
+      .from("machine_parts")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", part.id);
+    setDeleteBusy(false);
+    onChanged();
+  }
+
+  if (editing) {
+    return (
+      <PartForm
+        initial={part}
+        submitLabel="שמירה"
+        onDone={() => {
+          setEditing(false);
+          onChanged();
+        }}
+        onCancel={() => setEditing(false)}
+      />
+    );
+  }
+
+  return (
+    <div
+      className={`flex items-center gap-3 rounded-lg border border-border p-2 ${part.is_active ? "" : "opacity-55"}`}
+    >
+      {part.photo_storage_path ? (
+        <img
+          src={machinePartPhotoUrl(part.photo_storage_path)}
+          alt=""
+          className="w-12 h-12 rounded-lg object-cover border border-border shrink-0"
+        />
+      ) : (
+        <div className="w-12 h-12 rounded-lg border border-dashed border-border shrink-0 flex items-center justify-center text-primary">
+          <CameraIcon size={18} />
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold truncate">
+          <span className="text-primary font-normal">#{part.part_no}</span>{" "}
+          {part.name}
+          {!part.is_active && (
+            <span className="text-xs text-primary font-normal ms-2">
+              (מושבת)
+            </span>
+          )}
+        </p>
+        <p className="text-xs text-primary truncate">
+          {[
+            part.quantity != null && `כמות: ${part.quantity}`,
+            part.shelf_location && `מדף: ${part.shelf_location}`,
+            part.store_name,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
+      </div>
+      <ActiveToggle item={part} onToggle={toggleActive} busy={busy} />
+      <button
+        className="btn btn-ghost text-sm !min-h-[30px] !p-1.5"
+        onClick={() => setEditing(true)}
+        aria-label="עריכה"
+      >
+        <PencilIcon size={16} />
+      </button>
+      <DeleteAction name={part.name} onConfirm={remove} busy={deleteBusy} />
+    </div>
+  );
+}
+
+function PartsSection({ machineId, parts, onChanged }) {
+  const [showAdd, setShowAdd] = useState(false);
+
+  return (
+    <div className="flex flex-col gap-2">
+      {parts.map((p) => (
+        <PartRow key={p.id} part={p} onChanged={onChanged} />
+      ))}
+      {parts.length === 0 && !showAdd && (
+        <p className="text-xs text-primary">אין חלקים עדיין</p>
+      )}
+      {showAdd ? (
+        <PartForm
+          machineId={machineId}
+          submitLabel="הוספת חלק"
+          onDone={() => {
+            setShowAdd(false);
+            onChanged();
+          }}
+          onCancel={() => setShowAdd(false)}
+        />
+      ) : (
+        <div>
+          <button
+            type="button"
+            className="btn btn-outline text-sm !min-h-[34px]"
+            onClick={() => setShowAdd(true)}
+          >
+            <PlusIcon size={16} />
+            הוספת חלק
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const emptyMachineForm = { name: "", location: "" };
+
+function MachineCard({
+  machine,
+  expanded,
+  onToggleExpand,
+  periods,
+  taskNameOptions,
+  onChanged,
+}) {
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState(emptyMachineForm);
+  const [editError, setEditError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [detailTab, setDetailTab] = useState("periods");
+
+  function startEdit() {
+    setEditForm({ name: machine.name, location: machine.location || "" });
+    setEditError("");
+    setEditing(true);
+  }
+
+  async function saveEdit() {
+    if (!editForm.name.trim()) {
+      setEditError("יש להזין שם מכונה");
+      return;
+    }
+    setBusy(true);
+    const { error: err } = await supabase
+      .from("machines")
+      .update({
+        name: editForm.name.trim(),
+        location: editForm.location.trim() || null,
+      })
+      .eq("id", machine.id);
+    setBusy(false);
+    if (err) {
+      setEditError("השמירה נכשלה — נסו שוב");
+      return;
+    }
+    setEditing(false);
+    onChanged();
+  }
+
+  async function toggleActive() {
+    setBusy(true);
+    await supabase
+      .from("machines")
+      .update({ is_active: !machine.is_active })
+      .eq("id", machine.id);
+    setBusy(false);
+    onChanged();
+  }
+
+  async function remove() {
+    setDeleteBusy(true);
+    await supabase
+      .from("machines")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", machine.id);
+    setDeleteBusy(false);
+    onChanged();
+  }
+
+  const attachedPeriods = machine.machine_periods.filter((mp) => !mp.deleted_at);
+  const availablePeriods = periods.filter(
+    (p) => !attachedPeriods.some((mp) => mp.period_id === p.id),
+  );
+
+  return (
+    <li className={`card ${machine.is_active ? "" : "opacity-55"}`}>
+      <div className="p-4 flex items-center gap-3 flex-wrap">
+        <button
+          onClick={onToggleExpand}
+          className="flex items-center justify-center w-6 h-6 shrink-0 text-primary hover:text-foreground transition-colors"
+          title={expanded ? "סגירה" : "הצגת פרטים"}
+          aria-expanded={expanded}
+        >
+          <ChevronDownIcon
+            size={18}
+            className={`transition-transform ${expanded ? "rotate-180" : ""}`}
+          />
+        </button>
+
+        {editing ? (
+          <div className="flex-1 min-w-[240px] grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <input
+              className="input !min-h-[30px]"
+              value={editForm.name}
+              onChange={(e) =>
+                setEditForm((f) => ({ ...f, name: e.target.value }))
+              }
+              placeholder="שם המכונה"
+              autoFocus
+            />
+            <input
+              className="input !min-h-[30px]"
+              value={editForm.location}
+              onChange={(e) =>
+                setEditForm((f) => ({ ...f, location: e.target.value }))
+              }
+              placeholder="מיקום"
+            />
+            {editError && <p className="err sm:col-span-2">{editError}</p>}
+            <div className="sm:col-span-2 flex gap-2">
+              <button
+                className="btn btn-outline text-sm !min-h-[34px]"
+                disabled={busy}
+                onClick={saveEdit}
+              >
+                {busy ? <SpinnerIcon size={16} /> : <CheckIcon size={16} />}
+                שמירה
+              </button>
+              <button
+                className="btn btn-ghost text-sm !min-h-[34px]"
+                disabled={busy}
+                onClick={() => setEditing(false)}
+              >
+                <XIcon size={16} />
+                ביטול
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="flex-1 min-w-0 font-bold truncate">
+              #{String(machine.machine_no).padStart(3, "0")} {machine.name}
+              {machine.location && (
+                <span className="text-primary font-normal"> · {machine.location}</span>
+              )}
+              {!machine.is_active && (
+                <span className="text-xs text-primary font-normal ms-2">
+                  (מושבת)
+                </span>
+              )}
+            </p>
+            <ActiveToggle item={machine} onToggle={toggleActive} busy={busy} />
+            <button
+              className="btn btn-ghost text-sm !min-h-[34px]"
+              onClick={startEdit}
+              aria-label="עריכה"
+            >
+              <PencilIcon size={16} />
+            </button>
+            <DeleteAction
+              name={machine.name}
+              onConfirm={remove}
+              busy={deleteBusy}
+            />
+          </>
+        )}
+      </div>
+
+      {expanded && (
+        <div className="border-t border-border p-4 flex flex-col gap-4 sm:flex-row-reverse sm:items-start">
+          <MachineQr machineId={machine.id} machineNo={machine.machine_no} />
+          <div className="flex-1 flex flex-col gap-3">
+            <div className="flex gap-1">
+              {[
+                { key: "periods", label: "מחזורי טיפול" },
+                { key: "parts", label: "חלקים" },
+              ].map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setDetailTab(key)}
+                  className={`px-3 py-1.5 rounded-full text-sm font-bold transition-colors duration-200 ${
+                    detailTab === key
+                      ? "bg-accent text-white"
+                      : "bg-muted text-primary hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {detailTab === "periods" ? (
+              <>
+                {attachedPeriods.map((p) => (
+                  <PeriodCard
+                    key={p.id}
+                    period={p}
+                    taskNameOptions={taskNameOptions}
+                    onChanged={onChanged}
+                  />
+                ))}
+                <AddPeriodForm
+                  machineId={machine.id}
+                  availablePeriods={availablePeriods}
+                  onAdded={onChanged}
+                />
+              </>
+            ) : (
+              <PartsSection
+                machineId={machine.id}
+                parts={machine.machine_parts.filter((p) => !p.deleted_at)}
+                onChanged={onChanged}
+              />
+            )}
+          </div>
+        </div>
+      )}
+    </li>
+  );
+}
+
+function MachineMaintenanceTab() {
+  const [machines, setMachines] = useState(null);
+  const [periods, setPeriods] = useState([]);
+  const [error, setError] = useState("");
+  const [expandedId, setExpandedId] = useState(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [addForm, setAddForm] = useState(emptyMachineForm);
+  const [addError, setAddError] = useState("");
+  const [addBusy, setAddBusy] = useState(false);
+
+  async function load() {
+    const { data, error: err } = await supabase
+      .from("machines")
+      .select(
+        "*, machine_periods(*, maintenance_periods(name, schedule_kind, interval_years), machine_period_tasks(*)), machine_parts(*)",
+      )
+      .is("deleted_at", null)
+      .order("machine_no");
+    if (err) setError("הטעינה נכשלה — נסו לרענן");
+    else setMachines(data || []);
+  }
+
+  useEffect(() => {
     load();
+    supabase
+      .from("maintenance_periods")
+      .select("*")
+      .order("sort_order")
+      .then(({ data }) => setPeriods(data || []));
+  }, []);
+
+  const taskNameOptions = Array.from(
+    new Set(
+      (machines || []).flatMap((m) =>
+        m.machine_periods.flatMap((mp) =>
+          mp.machine_period_tasks.map((t) => t.task_name),
+        ),
+      ),
+    ),
+  );
+
+  async function addMachine(e) {
+    e.preventDefault();
+    if (!addForm.name.trim()) {
+      setAddError("יש להזין שם מכונה");
+      return;
+    }
+    setAddError("");
+    setAddBusy(true);
+    const { data, error: err } = await supabase
+      .from("machines")
+      .insert({
+        name: addForm.name.trim(),
+        location: addForm.location.trim() || null,
+      })
+      .select()
+      .single();
+    setAddBusy(false);
+    if (err) {
+      setAddError("הוספת המכונה נכשלה — נסו שוב");
+      return;
+    }
+    setAddForm(emptyMachineForm);
+    setShowAdd(false);
+    await load();
+    setExpandedId(data.id);
   }
 
   return (
@@ -1278,32 +2296,46 @@ function MaintenanceTasksTab() {
         <div>
           <button className="btn btn-accent" onClick={() => setShowAdd(true)}>
             <PlusIcon size={18} />
-            הוספת משימה
+            הוספת מכונה
           </button>
         </div>
       ) : (
-        <form onSubmit={add} className="card p-4">
-          <h3 className="font-bold mb-3">הוספת משימת תחזוקה</h3>
-          <div className="flex gap-2 items-start flex-wrap">
-            <div className="flex-1 min-w-[220px]">
-              <input
-                className="input"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="שם המשימה"
-                aria-label="שם המשימה"
-                autoFocus
-              />
-              {formError && <p className="err">{formError}</p>}
-            </div>
-            <button className="btn btn-accent" disabled={busy}>
-              {busy ? <SpinnerIcon size={18} /> : <PlusIcon size={18} />}
+        <form
+          onSubmit={addMachine}
+          className="card p-4 grid grid-cols-1 sm:grid-cols-2 gap-3"
+        >
+          <h3 className="font-bold sm:col-span-2">הוספת מכונה חדשה</h3>
+          <div>
+            <label className="label !text-xs">שם המכונה *</label>
+            <input
+              className="input"
+              value={addForm.name}
+              onChange={(e) =>
+                setAddForm((f) => ({ ...f, name: e.target.value }))
+              }
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="label !text-xs">מיקום</label>
+            <input
+              className="input"
+              value={addForm.location}
+              onChange={(e) =>
+                setAddForm((f) => ({ ...f, location: e.target.value }))
+              }
+            />
+          </div>
+          {addError && <p className="err sm:col-span-2">{addError}</p>}
+          <div className="sm:col-span-2 flex gap-2">
+            <button className="btn btn-accent" disabled={addBusy}>
+              {addBusy ? <SpinnerIcon size={18} /> : <PlusIcon size={18} />}
               הוספה
             </button>
             <button
               type="button"
               className="btn btn-ghost"
-              disabled={busy}
+              disabled={addBusy}
               onClick={() => setShowAdd(false)}
             >
               ביטול
@@ -1313,82 +2345,32 @@ function MaintenanceTasksTab() {
       )}
 
       {error && <p className="err">{error}</p>}
-      <ul className="flex flex-col gap-2">
-        {(items || []).map((t) => (
-          <li
-            key={t.id}
-            className={`card p-4 flex items-center gap-3 flex-wrap ${t.is_active ? "" : "opacity-55"}`}
-          >
-            <p className="flex-1 font-bold truncate">
-              {t.name}
-              {!t.is_active && (
-                <span className="text-xs text-primary font-normal ms-2">
-                  (מושבת)
-                </span>
-              )}
-            </p>
-            <ActiveToggle item={t} onToggle={() => toggleActive(t)} />
-          </li>
+
+      <ul className="flex flex-col gap-3">
+        {(machines || []).map((m) => (
+          <MachineCard
+            key={m.id}
+            machine={m}
+            expanded={expandedId === m.id}
+            onToggleExpand={() =>
+              setExpandedId(expandedId === m.id ? null : m.id)
+            }
+            periods={periods}
+            taskNameOptions={taskNameOptions}
+            onChanged={load}
+          />
         ))}
-        {items?.length === 0 && (
+        {machines?.length === 0 && (
           <li className="card p-6 text-center text-primary">
-            אין משימות תחזוקה עדיין
+            אין מכונות עדיין
           </li>
         )}
-        {items === null && (
+        {machines === null && (
           <li className="flex justify-center py-8 text-primary">
             <SpinnerIcon size={28} />
           </li>
         )}
       </ul>
-    </div>
-  );
-}
-
-// Phase 2-revision: מכונות sub-tab is a stub — Phase 3 builds its content
-// (machine list/add/edit, period assignment, QR). This phase only establishes
-// the תחזוקת מכונות parent tab and its two sub-tabs.
-function MachinesStubSection() {
-  return (
-    <div className="card p-8 text-center text-primary">
-      <p className="font-bold">מכונות</p>
-      <p className="text-sm mt-1">בקרוב — ניהול מכונות ומחזורי טיפול</p>
-    </div>
-  );
-}
-
-const MACHINE_MAINTENANCE_SUB_TABS = [
-  { key: "machines", label: "מכונות" },
-  { key: "tasks", label: "משימות תחזוקה" },
-];
-
-// Phase 2-revision: one parent tab grouping everything machine-maintenance-
-// related, replacing the earlier standalone מחזורי טיפול tab (deleted — periods
-// are now fixed/seeded, never admin-editable) and the earlier flat
-// משימות תחזוקה top-level tab (relocated here unchanged).
-function MachineMaintenanceTab() {
-  const [subTab, setSubTab] = useState("machines");
-
-  return (
-    <div>
-      <div className="flex gap-1 flex-wrap mb-4">
-        {MACHINE_MAINTENANCE_SUB_TABS.map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => setSubTab(key)}
-            className={`px-3 py-2 rounded-full text-sm font-bold transition-colors duration-200 ${
-              subTab === key
-                ? "bg-accent text-white"
-                : "bg-muted text-primary hover:text-foreground"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {subTab === "machines" && <MachinesStubSection />}
-      {subTab === "tasks" && <MaintenanceTasksTab />}
     </div>
   );
 }
