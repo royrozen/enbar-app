@@ -35,7 +35,7 @@ Four roles, all resolved from a real authenticated session (`profiles`, extended
 
 **In scope:**
 - Maintenance period catalog (weekly/monthly/yearly/tri-yearly, extensible from admin)
-- Maintenance task catalog (reusable across machines, extensible from admin)
+- Machine-owned maintenance tasks (per machine's period assignment, with autocomplete against existing text for convenience — not a shared catalog; see §6.3, §9)
 - Machines: CRUD, unique display number, auto-generated QR
 - Per-machine assignment of one or more periods, each with its own fixed schedule and task list
 - QR-triggered checklist flow, gated by the app's real phone-OTP auth (no separate password)
@@ -143,17 +143,9 @@ CREATE TABLE maintenance_periods (           -- fixed/seeded, NOT admin-manageab
 -- Seeded once via migration with the four rows above. No admin UI reads/writes this table's
 -- catalog rows (Roy's explicit decision — see §7.1). Adding a fifth frequency in the future
 -- means a new migration + a new next-due-date helper branch, not an in-app action.
-
-CREATE TABLE maintenance_tasks (              -- admin-extensible (unchanged)
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  is_active boolean NOT NULL DEFAULT true,
-  deleted_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
 ```
 
-(No `maintenance_workers` table — superseded by §4.0's real auth identity.)
+**No `maintenance_tasks` table.** Corrected after reviewing Roy's real machine/task mapping (a CSV of the actual 21 machines and their tasks): a task is not an independent entity a machine merely references — it's owned entirely by the machine's period assignment. See §6.3 — `machine_period_tasks.task_name` is a plain text column, not a foreign key. (No `maintenance_workers` table either — superseded by §4.0's real auth identity.)
 
 ### 6.2 Machines
 
@@ -192,11 +184,15 @@ CREATE TABLE machine_periods (
 CREATE TABLE machine_period_tasks (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   machine_period_id uuid NOT NULL REFERENCES machine_periods(id),
-  task_id uuid NOT NULL REFERENCES maintenance_tasks(id),
+  task_name text NOT NULL,                    -- owned by this machine's period, NOT a foreign key — a task has no existence independent of a machine (Roy's explicit reasoning). Repetition across machines (e.g. "בצע גירוז לגג״ש" on several machines in the real mapping) is plain duplicate text, not a shared row.
   sort_order integer NOT NULL DEFAULT 0,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (machine_period_id, task_id)
+  is_active boolean NOT NULL DEFAULT true,
+  deleted_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
 );
+-- Autocomplete when adding a task (SELECT DISTINCT task_name FROM machine_period_tasks) is
+-- purely a UX convenience for consistent wording — it is NOT backed by a foreign key, and
+-- editing one machine's task text never affects any other machine's row.
 ```
 
 Adding a new period type to the catalog is never auto-assigned to any machine — always manual, per machine, including its schedule anchor.
@@ -223,7 +219,7 @@ CREATE TABLE machine_period_logs (           -- one row per period touched in th
 CREATE TABLE machine_period_log_tasks (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   log_id uuid NOT NULL REFERENCES machine_period_logs(id),
-  task_id uuid NOT NULL REFERENCES maintenance_tasks(id),
+  machine_period_task_id uuid NOT NULL REFERENCES machine_period_tasks(id),
   is_checked boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now()
 );
@@ -320,16 +316,17 @@ CREATE TABLE fault_report_parts (             -- optional, multi
 
 ## 7. Screens
 
-### 7.1 Admin — תחזוקת מכונות (new top-level tab under `/manager/settings`, parent of two sub-tabs)
-This replaces what was three separate ideas (a standalone periods tab, a standalone `/manager/machines` area, and a machine-nested parts tab) with **one parent tab** grouping everything machine-maintenance-related — Roy's explicit restructuring.
+### 7.1 Admin — תחזוקת מכונות (new top-level tab under `/manager/settings`)
+This replaces what was four separate ideas across earlier drafts (a standalone periods tab, a standalone `/manager/machines` area, a machine-nested parts tab, and a standalone tasks tab) with **one flat tab** — no nested sub-tab bar, since machines is the only thing left in it once tasks and periods both stopped being independent destinations.
 
-- **מכונות** (sub-tab) — list of machines (`#{machine_no}` zero-padded, name, location, active toggle), add/edit, per-machine period assignment (pick from the fixed period list — see below — set its schedule anchor, and pick tasks from the task catalog for that period on this machine), and QR display for printing. Parts live inside a specific machine's own detail view (drill in from this list), not as a separate flat sub-tab — a part only makes sense in the context of one machine.
-- **משימות תחזוקה** (sub-tab) — name only. List+add, deactivate-only. Still admin-extensible (unchanged from before).
-- **No מחזורי טיפול sub-tab.** Periods are fixed/seeded (§6.1) — Roy's explicit decision to remove admin management of this catalog entirely. The four periods (`שבועי`, `חודשי`, `שנתי`, `תלת שנתי`) are chosen from a fixed list wherever a period needs to be picked (e.g. assigning a period to a machine), never added/edited/deactivated through any screen.
+- **Machines list** — `#{machine_no}` zero-padded, name, location, active toggle, add/edit, per-machine period assignment (pick from the fixed four-period list — §6.1/§9 — set its schedule anchor), and QR display for printing.
+- **Tasks are added inline, per machine period — never from a standalone screen.** Opening a machine's period assignment shows a task list owned by that machine (§6.3 — `machine_period_tasks.task_name`, plain text). Adding a task offers autocomplete against task text already used on *other* machines (`SELECT DISTINCT task_name`), purely for consistent wording — it is not a shared entity, and editing a task under one machine never touches any other machine's row. There is no "add a task" action anywhere outside a machine's own detail.
+- **Parts** live inside a specific machine's own detail view too, same reasoning — a part only makes sense in the context of one machine (§7.2).
+- **No periods-management UI at all.** Periods are fixed/seeded (§6.1) — Roy's explicit decision. The four periods (`שבועי`, `חודשי`, `שנתי`, `תלת שנתי`) are chosen from a fixed list wherever a period needs to be picked, never added/edited/deactivated through any screen.
 - **New control on the existing עובדים (employees) tab (unrelated to תחזוקת מכונות, stays where it is):** a per-employee toggle "גישה למודול תחזוקה" (`maintenance_access_enabled`), default on. `factory_manager`/`platform_admin` only.
 - (No QR-password field — removed in v2, replaced by real auth.)
 
-### 7.2 Admin — parts (within a machine's own detail view, under תחזוקת מכונות → מכונות)
+### 7.2 Admin — parts (within a machine's own detail view, under תחזוקת מכונות)
 - List of parts for the machine (`part_no`, name, quantity, shelf location).
 - Add/edit: all fields from §6.5, including photo upload.
 
@@ -377,7 +374,8 @@ RLS on every new table is **`authenticated`-only**, matching the rest of the app
 - **`platform_admin` scope, corrected mid-implementation.** Originally scoped to this module only; changed to full app-wide super-admin (identical to `factory_manager` everywhere) once the narrower version's gaps became visible during Phase 2. Applied as a standalone RLS migration widening every pre-existing `factory_manager`-only policy in the schema (40 policies, 16 tables — `catalog_items`, `clients`, `employees`, `exception_logs`, `exception_photos`, `lunch_menu_items`, `lunch_orders`, `lunch_settings`, `part_orders`, `part_requests`, `profiles`, `projects`, `report_photos`, `reports`, `signature_requests`, `team_leads`), tagged separately in git from this module's own phase tags.
 - **Periods catalog is fixed, not admin-manageable — corrected after Phase 2 shipped.** Originally an admin-editable list+add tab (like tasks). Roy's decision: remove it entirely. `maintenance_periods` is now seeded once via migration with four fixed rows and never exposed to any admin CRUD screen. Adding a fifth frequency later is a developer/migration action, not an in-app one.
 - **New frequency: `תלת שנתי` = 3 times a year, not "once every 3 years."** This is a genuine redefinition — the term was originally used (in Roy's own first message and the original schema) for a once-per-3-years cadence. That cadence was briefly renamed to `אחת לשלוש שנים` to resolve the ambiguity, then **deleted outright** on Roy's later instruction — it isn't a period the module needs. `תלת שנתי` is reserved going forward for the 3x/year (~every 4 months) cadence, its own `schedule_kind` (`'triannual'`), reusing the `anchor_month`/`day_of_month` fields with occurrences every 4 months. The final fixed catalog is four rows: `שבועי`, `חודשי`, `שנתי` (plain once-a-year — restored after being accidentally dropped from an earlier edit of this document), `תלת שנתי`.
-- **Admin navigation restructured — corrected after Phase 2 shipped.** What was three separate ideas (a periods tab, a standalone `/manager/machines` area, a machine-nested parts tab) is now one parent tab, **תחזוקת מכונות**, with two sub-tabs: **מכונות** (machines, with parts reachable inside each machine's own detail — not a separate flat sub-tab) and **משימות תחזוקה** (tasks, unchanged). The employees-tab access toggle stays where it is, unrelated to this restructuring.
+- **Admin navigation restructured — corrected twice after Phase 2 shipped.** First pass: collapsed a periods tab, a standalone `/manager/machines` area, and a machine-nested parts tab into one parent tab, `תחזוקת מכונות`, with `מכונות` and `משימות תחזוקה` as sub-tabs. Second pass, after reviewing Roy's real machine/task mapping (a CSV of the actual 21 machines and their tasks): `משימות תחזוקה` isn't a destination at all — a task only exists in the context of a specific machine's period, added inline there with autocomplete (§6.3, §7.1), never from any standalone screen. With that gone, the parent-tab-with-sub-tabs structure had only one child left, so it collapsed further into a single flat `תחזוקת מכונות` tab (the machines list itself). The employees-tab access toggle was never part of any of this.
+- **Real machine/task data available.** Roy provided a CSV mapping all 21 real machines, their parts, and their per-period tasks (`מיפוי_מכונות_Enbar_-_מכונות.csv`) — confirms the task-ownership model above and is a natural seed-data source for Phase 3 instead of manual entry, if Roy wants to import it rather than type all 21 machines by hand.
 
 ## 10. Out of scope (explicit)
 

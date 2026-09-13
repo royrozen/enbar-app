@@ -211,26 +211,81 @@ After each completed step: ✅ [what was done] — [table affected]
 
 ---
 
-## Phase 3 — Machine management
+## Phase 2-revision-3 — Remove maintenance_tasks catalog, make tasks machine-owned
 
 ```
 ## Objective
-Build the מכונות sub-tab (under the תחזוקת מכונות parent tab created in Phase 2-revision): machine list, add/edit, per-machine period assignment, and QR generation/display, per PRD §7.1.
+Correct Phase 1's schema and Phase 2/Phase 2-revision's shipped UI per a third decision: tasks are not a shared, foreign-keyed catalog. After reviewing Roy's real machine/task mapping (a CSV of the actual 21 machines and their tasks), a task exists only in the context of one machine's period assignment. Drop the maintenance_tasks table entirely; machine_period_tasks.task_id (FK) becomes machine_period_tasks.task_name (plain text). Remove the משימות תחזוקה tab/component (already relocated once in Phase 2-revision) entirely — there is no standalone task-management destination anymore, in any form. Collapse the now-single-child תחזוקת מכונות parent-tab-with-sub-tabs structure into one flat tab (the machines list itself, no nested sub-tab bar).
 
 ## Context
-Search the codebase for the existing manager-area tab/sub-tab pattern (used by, e.g., the lunch-ordering sub-tabs under the employees tab, and the new תחזוקת מכונות parent from Phase 2-revision) and for an existing QR-generation dependency; if none exists, check package.json before adding one. Period selection in this phase's UI must read from the fixed four-row maintenance_periods list (Phase 2-revision) — there is no "add a period" action anywhere in this phase either.
+Read PRD §6.1, §6.3, §7.1, and §9's two newest resolved-decision bullets before starting. Check whether any machine_period_tasks rows exist yet referencing maintenance_tasks (Phase 3 hasn't shipped, so this is likely empty, but confirm rather than assume before altering the column).
 
 ## Target State
-The מכונות sub-tab lists machines with #{machine_no} (zero-padded), name, location, active toggle. Add/edit works. Within a machine's detail, one of the four fixed periods can be attached, with the correct anchor input shown per its schedule_kind (weekday picker for weekly, day-of-month for monthly, month+day for triannual and yearly), and tasks from the maintenance_tasks catalog can be attached per period. Saving a period assignment computes its initial next_due_date via the Phase 1/Phase 2-revision helper (Saturday-shift applied, triannual branch included). A QR encoding the machine's UUID (never machine_no) is generated and displayed for printing immediately on machine creation.
+- maintenance_tasks table is dropped.
+- machine_period_tasks.task_id (uuid FK) is replaced with task_name (text, NOT NULL) — same table, column swapped, not a new table.
+- machine_period_log_tasks.task_id is replaced with machine_period_task_id (FK to machine_period_tasks(id) instead of maintenance_tasks(id)) — this table already changed in Phase 1's original design to reference the catalog; it now references the machine-owned row directly.
+- The משימות תחזוקה tab/component is deleted (not hidden) from wherever Phase 2-revision left it.
+- תחזוקת מכונות becomes a single flat admin tab with no sub-tab navigation — it shows the machines list directly. (Phase 3, not yet built, will populate this tab's actual content; this phase only needs to remove the now-empty sub-tab shell, if Phase 2-revision already built one.)
 
 ## Scope
-- Work only in: the מכונות sub-tab under תחזוקת מכונות (not a standalone /manager/machines route — v1 of this phase assumed that structure, it's superseded by Phase 2-revision's navigation change)
-- Do NOT touch: any other existing manager route or sub-tab
+- Work only in: maintenance_tasks/machine_period_tasks/machine_period_log_tasks schema, and whatever tab/shell component currently renders תחזוקת מכונות's sub-tab navigation
+- Do NOT touch: the employees tab/toggle, machine_periods, maintenance_periods, or any other existing table/screen
+
+## Constraints
+- Create a git tag before this migration (e.g. pre-task-model-revision) — it drops a table
+- If any machine_period_tasks or machine_period_log_tasks row already exists referencing the old FK structure, stop and ask rather than deleting data silently
+- Only make changes directly requested
+
+## Acceptance Criteria
+- [ ] maintenance_tasks no longer exists, verified via Supabase:list_tables
+- [ ] machine_period_tasks has a task_name text column, no task_id column
+- [ ] machine_period_log_tasks references machine_period_tasks(id), not any remaining maintenance_tasks row
+- [ ] No component anywhere in the app renders a standalone task-management screen or a משימות תחזוקה tab
+- [ ] תחזוקת מכונות renders as a single flat tab, no sub-tab bar with only one entry
+
+## Stop Conditions
+Stop and ask before:
+- Deleting any existing machine_period_tasks/machine_period_log_tasks data
+- Leaving any admin-facing path to manage tasks independent of a machine
+
+## Progress
+After each completed step: ✅ [what was done] — [table/file affected]
+```
+
+🎯 Target: Claude Code · 💡 Treats the column swap (task_id → task_name) as a real schema migration with a data-safety check, not a cosmetic rename — since machine_period_log_tasks' FK target also has to move in the same pass or it'll point at a table that no longer exists.
+
+**Session Strategy:** Continue — needs Phase 1's schema and whatever Phase 2-revision built for the tab shell. Run before Phase 3.
+
+---
+
+## Phase 3 — Machine management + real data import
+
+```
+## Objective
+Build the תחזוקת מכונות tab (a single flat tab, not a sub-tab — see Phase 2-revision-3): machine list, add/edit, per-machine period assignment with inline task management, and QR generation/display, per PRD §7.1. Also import Roy's real 21-machine dataset (מיפוי_מכונות_Enbar_-_מכונות.csv — Roy will attach or place this file for you; if it isn't present, stop and ask for it rather than inventing placeholder machines) as this phase's seed data, instead of Roy typing all 21 in by hand afterward.
+
+## Context
+Search the codebase for the existing manager-area tab pattern and for an existing QR-generation dependency; if none exists, check package.json before adding one. Period selection must read from the fixed four-row maintenance_periods list (Phase 2-revision) — there is no "add a period" action. Task entry is inline per machine period: a text input with autocomplete suggesting values already used elsewhere (SELECT DISTINCT task_name FROM machine_period_tasks) — there is no separate task-picker screen or shared catalog to select from (Phase 2-revision-3 removed that model entirely).
+
+The CSV's columns are: מספר מכונה, שם מכונה, חלקים (a comma-separated free-text list, not structured — only present for some machines), תקופת טיפול (period name per task row — שבועי/חודשי/תלת שנתי, one of the fixed four), משימות (the task text for that machine+period). Each machine has one row per task, with machine/parts columns only filled on the task's first row for that machine (blank on subsequent rows for the same machine — carry the last-seen machine down when parsing).
+
+**Known gap: the CSV has no schedule anchor (no specific weekday/day-of-month/month+day) for any machine.** Import each machine_periods row with a placeholder anchor — weekday=0 (Sunday) for weekly, day_of_month=1 for monthly, anchor_month=1/anchor_day=1 for yearly/triannual — and compute next_due_date from that placeholder via the Phase 1 helper. This is a deliberate placeholder, not a guess at Roy's real intent: he will correct each machine's actual anchor by hand afterward through the UI this phase builds. List every machine+period you imported with a placeholder anchor in your final report so Roy knows exactly what still needs a real value.
+
+## Target State
+תחזוקת מכונות lists machines with #{machine_no} (zero-padded), name, location, active toggle. Add/edit works. Within a machine's detail, one of the four fixed periods can be attached, with the correct anchor input shown per its schedule_kind (weekday picker for weekly, day-of-month for monthly, month+day for triannual and yearly). Tasks for that period are added directly as text, with autocomplete suggesting existing task_name values typed for other machines — selecting a suggestion just fills the text, it does not create any link or reference. Saving a period assignment computes its initial next_due_date via the Phase 1/Phase 2-revision helper (Saturday-shift applied, triannual branch included). A QR encoding the machine's UUID (never machine_no) is generated and displayed for printing immediately on machine creation.
+
+Separately: all 21 real machines from the CSV exist in the database, in machine_no order matching the CSV's מספר מכונה column (insert in CSV order so the IDENTITY column assigns matching numbers — verify this held, don't assume it), each with its real name, its real parts (as machine_parts rows with only `name` populated — the CSV has no price/SKU/store data, leave those fields null), its real period assignments (with placeholder anchors per above), and its real tasks as machine_period_tasks.task_name text, exactly as written in the CSV.
+
+## Scope
+- Work only in: the תחזוקת מכונות tab (flat, no sub-tab route), and a one-time data-import migration/script for the CSV
+- Do NOT touch: any other existing manager route or tab
 
 ## Constraints
 - QR payload MUST be machines.id (uuid), never machine_no
 - weekday options must only offer Sunday-Friday
 - No UI action to add/edit/deactivate a period — periods are picked from the fixed four, never created
+- No standalone task list/picker screen — tasks are only ever added while editing a specific machine's period, as plain text
+- Do not invent schedule anchors beyond the stated placeholder rule — no guessing a "likely" day for any specific machine
 - Check package.json before adding any new dependency
 - Only make changes directly requested
 
@@ -240,21 +295,27 @@ The מכונות sub-tab lists machines with #{machine_no} (zero-padded), name, 
 - [ ] Weekly period attachment only allows Sunday-Friday as anchor day
 - [ ] Monthly/triannual/yearly attachment shows the correct anchor input for each
 - [ ] The period picker offers exactly the four fixed rows, with no way to add a fifth
+- [ ] Adding a task under one machine's period does not appear as a selectable/linked item under any other machine — only as an autocomplete text suggestion
+- [ ] Editing a task's text on one machine does not change the same-looking text on another machine's row
 - [ ] Tasks attached to a machine period persist and reload correctly
+- [ ] All 21 CSV machines exist, with machine_no matching the CSV's מספר מכונה column, verified via a direct query
+- [ ] Every task and part from the CSV was imported with the exact original text, spot-checked across at least 5 machines
+- [ ] The report lists every machine+period that received a placeholder anchor (this will be all of them) so Roy knows what to fix by hand
 
 ## Stop Conditions
 Stop and ask before:
 - Adding any new npm dependency
 - Using machine_no anywhere in a URL, route param, or QR payload
-- Building this as a standalone route instead of the מכונות sub-tab
+- Building any standalone task-management screen or shared task-picker
+- Proceeding with the import if the CSV file isn't actually available to you
 
 ## Progress
 After each completed step: ✅ [what was done] — [file(s) affected]
 ```
 
-🎯 Target: Claude Code · 💡 Updated for the navigation restructuring and the fourth period kind — the QR/UUID guardrail carries over unchanged from the original version.
+🎯 Target: Claude Code · 💡 Separates "build the screen" from "import real data" as two halves of one phase's acceptance criteria, and makes the placeholder-anchor gap an explicit, reported fact rather than a silent guess — since inventing a plausible-looking schedule for 21 real machines would be worse than an obvious placeholder Roy knows to fix.
 
-**Session Strategy:** Continue — needs Phase 1 schema, Phase 2's admin-tab conventions, and Phase 2-revision's new תחזוקת מכונות parent tab and fixed period list.
+**Session Strategy:** Continue — needs Phase 1 schema, Phase 2-revision-3's corrected task model, and the fixed period list. Make sure the CSV file is actually accessible to this Claude Code session (attached or placed in the repo) before pasting this prompt.
 
 ---
 
