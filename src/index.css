@@ -146,25 +146,37 @@ body {
     font-weight: 700;
     font-size: 0.95rem;
   }
-  .manager-desktop .btn {
-    min-height: 34px;
-    padding: 0 0.9rem;
-    font-size: 0.92rem;
-    border-radius: 0.65rem;
-  }
-  .manager-desktop .btn-ghost {
-    min-height: 30px;
-    padding: 0 0.6rem;
-  }
-  .manager-desktop .input {
-    min-height: 38px;
-    padding: 0.5rem 0.75rem;
-    font-size: 0.95rem;
-    border-radius: 0.65rem;
-  }
-  .manager-desktop .label {
-    margin-bottom: 0.25rem;
-    font-size: 0.85rem;
+  /* Compact control sizing for /manager/settings, desktop widths only
+     (matches Tailwind's `lg:` breakpoint) — .manager-desktop sits on the
+     page's root wrapper at every width, so without this @media guard these
+     rules would also shrink buttons/inputs on mobile. */
+  @media (min-width: 1024px) {
+    .manager-desktop .btn {
+      min-height: 34px;
+      padding: 0 0.9rem;
+      font-size: 0.92rem;
+      border-radius: 0.65rem;
+    }
+    .manager-desktop .btn-ghost {
+      min-height: 30px;
+      padding: 0 0.6rem;
+    }
+    .manager-desktop .input {
+      min-height: 38px;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.95rem;
+      border-radius: 0.65rem;
+    }
+    .manager-desktop select.input {
+      /* Keep room for the custom chevron background-image — the shorthand
+         `padding` above resets padding-left, which otherwise lets the arrow
+         overlap the last word in narrow/shrink-to-fit selects. */
+      padding-left: 2.5rem;
+    }
+    .manager-desktop .label {
+      margin-bottom: 0.25rem;
+      font-size: 0.85rem;
+    }
   }
   .card {
     background: #fff;
