@@ -1,113 +1,129 @@
 # HANDOFF
 
-Written 2026-09-13, for a reader with zero prior context.
+Written 2026-09-14, for a reader with zero prior context.
 
 ## Branch
-`feat/maintenance-tracking` — not merged to `main`. All work below lives here.
-Just merged into `dev` for Roy to test on the dev preview.
+`fix/settings-desktop-layout` — branched off `main` at commit `c99b1f0`
+(Phases 1-4 of the maintenance module, already merged; see CHANGELOG.md /
+TODO.md "Done" for that history). **Nothing on this branch is committed
+yet** — all changes below are uncommitted working-tree edits. Roy has not
+signed off on committing/opening a PR yet.
 
 ## Where things stand
-Building the **maintenance module** (machine × maintenance-period tracking,
-QR-triggered checklists, per-machine parts catalog, fault/breakage reporting).
-Following `enbar-app - PRD/enbar-maintenance-module-implementation-plan.md`,
-one phase per session. **Phases 1-4 (+ three corrective revisions) are done
-and approved.** Phase 5 is next.
+The ask: adapt the desktop/laptop layout of the already-shipped `תחזוקת
+מכונות` (machine maintenance) admin screen, which was built mobile-first and
+wasteful on wide screens, without regressing the mobile experience at all.
+Scope was the `/manager/settings` shell, the `תחזוקת מכונות` tab, and its
+machine list + detail view — no changes to data fetching, RLS, other admin
+tabs, or Hebrew copy.
 
-Read `enbar-app - PRD/enbar-maintenance-module-prd.md` (current) and the
-implementation plan (same folder) before touching anything — both are the
-authoritative spec, already updated for every decision made mid-build.
+**First attempt (rejected):** a 2-column card grid for the machine list,
+with periods/parts gridded inside each expanded card. Roy: "I don't like it
+at all... change the concept." Reverted before committing anything.
 
-### What shipped
-- **Phase 1** — full DB schema for the module (11 tables), RLS, `profiles`/
-  `employees` extended for the new `factory_worker`/`platform_admin` roles,
-  self-provisioning RLS policy, `compute_next_due_date()` helper,
-  `set_part_no()` trigger, two Storage buckets. Tag: `pre-maintenance-schema`.
-- **App-wide `platform_admin` superadmin** — a standalone migration widening
-  40 pre-existing RLS policies across 16 tables, plus the `/manager/settings`
-  route guard. Tag: `pre-platform-admin-superadmin`.
-- **Phase 2** — admin catalog tabs + the per-employee
-  `maintenance_access_enabled` toggle on the existing employees tab.
-- **Phase 2-revision** — periods catalog made fixed/seeded (never
-  admin-editable), added the `triannual` schedule kind, restructured
-  `/manager/settings` nav into a `תחזוקת מכונות` parent tab. Tag:
-  `pre-period-catalog-revision`.
-- **Phase 2-revision-2** — corrected the periods seed data: deleted
-  `אחת לשלוש שנים`, restored plain `שנתי`. Final fixed catalog: שבועי /
-  חודשי / שנתי / תלת שנתי.
-- **Phase 2-revision-3** — dropped `maintenance_tasks` entirely (tag:
-  `pre-task-model-revision`); tasks are now machine-owned free text
-  (`machine_period_tasks.task_name`), never a shared catalog. Collapsed
-  `תחזוקת מכונות` to one flat tab, no sub-tab bar.
-- **Phase 3** — built the `תחזוקת מכונות` tab for real: machine list
-  (add/edit/deactivate, `#{machine_no}` zero-padded), per-machine period
-  assignment with schedule-correct anchor inputs, inline machine-owned tasks
-  with cross-machine autocomplete, printable QR (`machines.id`, never
-  `machine_no`). Added `qrcode` npm dependency. Imported Roy's real
-  21-machine CSV (21 machines, 40 parts, 28 periods, 78 tasks) — machine_no
-  verified 1-21 matching CSV order after catching and fixing a stale-identity
-  sequence gap. Found and fixed two pre-existing bugs: the dev DB's periods
-  catalog never actually got the Phase 2-revision-2 fix (TODO had marked it
-  done, it wasn't applied), and `compute_next_due_date`'s triannual branch
-  read the wrong columns (day_of_month instead of anchor_month/anchor_day).
-- **Phase 4** — added a `חלקים` (parts) tab to each machine's detail view:
-  list/add/edit/deactivate covering all PRD §6.5 fields including photo
-  upload (reuses the existing report/exception-photo compression pattern).
-  Found and fixed a real Phase 1 gap: `machine-parts` Storage bucket had zero
-  `storage.objects` RLS policies, so uploads would have failed silently
-  despite the bucket being public. `fault-reports` has the identical gap,
-  intentionally left for whoever builds Phase 7 (see TODO.md).
-- **Select-arrow bug** — `select.input` in `src/index.css` was missing
-  `-webkit-appearance: none`, so Safari never rendered the custom dropdown
-  arrow on any select in the app. Fixed app-wide, Roy confirmed.
-- Roy has since logged in with real OTP, clicked through Phase 3/4's UI
-  himself, and set the real schedule anchor (weekday/day/month) for all 28
-  imported machine_periods rows by hand — that placeholder-anchor cleanup
-  item is closed.
+**Second attempt (approved), built with the `frontend-design` skill:** a
+**split console** — persistent two-pane layout at `lg:` (≥1024px): a
+scrollable machine roster on one side (status dot, monospace `#00N` badge,
+name), full detail for whichever machine is selected always visible on the
+other side. No accordion, no expand-push-down. Mobile keeps the original
+single-column accordion list untouched. This shipped as a `variant` prop
+(`"list"` vs `"pane"`) on the existing `MachineCard` component so the detail
+rendering (QR, periods, parts) has one source of truth instead of two
+diverging copies — see `src/pages/ManagerSettings.jsx`.
 
-All of this is committed to `feat/maintenance-tracking` and merged into `dev`.
+### Follow-up requests handled in the same session, after the layout landed
+- **Part details on click.** Tapping/clicking a part row (`PartRow`) now
+  expands in place to show quantity, shelf location, store name/phone/SKU,
+  purchase price/date, and a larger photo — previously only visible by
+  opening the edit form. Works identically in the mobile accordion and the
+  desktop pane (shared component).
+- **QR flow replaced twice, ended up print-first.** Original always-visible
+  QR canvas → hidden-by-default with a text reveal button → (per Roy) a
+  small `QrCodeIcon` button in the machine header, positioned between the
+  edit (pencil) and active-toggle controls → (per Roy) clicking it no longer
+  reveals an inline canvas at all — it opens a small popup window
+  (`printMachineQr()` in `ManagerSettings.jsx`) with the Enbar logo, the
+  machine's `#00N` badge and name, and the QR, then calls `window.print()`
+  automatically. `MachineQr` component and its `qrRevealed` state were
+  deleted once the print flow replaced them. Logo pulled from the existing
+  `LOGO_URL` export in `src/components/Logo.jsx`. Logo size in the print
+  popup was bumped from 44px to 88px on request.
+- **Machine search.** A search box (name / `#00N` / location, case-
+  insensitive) above the machine list, filtering both the mobile list and
+  the desktop roster. Reuses the exact `SearchIcon` + `.input !ps-10`
+  pattern already used in `ManagerDashboard.jsx` — no new component. Desktop
+  pane selection is independent of the filter (searching doesn't change or
+  clear which machine's detail is showing).
+- **Select-arrow overlap bug.** In the "הוספת מחזור טיפול" (add period)
+  dropdown, the custom chevron background-image was overlapping the last
+  word ("טיפול"). Root cause: `.manager-desktop .input`'s `padding`
+  shorthand in `src/index.css` was overriding `select.input`'s
+  `padding-left: 2.5rem` (higher specificity, two classes vs. one class +
+  one element — a classic selector-specificity collision, not confined to
+  this one dropdown). Fixed with a `.manager-desktop select.input` rule
+  restoring the reserved padding. **This is a different bug from the one
+  already in TODO.md's Done list** ("select.input was missing
+  `-webkit-appearance: none`, Safari-only") — that one is already fixed and
+  confirmed; this one affected every browser, just only visibly on
+  narrow/shrink-to-fit selects.
+
+### Noticed mid-session, not authored by this agent
+While working, `src/index.css` changed on disk outside this session's own
+edits: the `.manager-desktop .btn` / `.input` / `.label` compact-sizing
+rules got wrapped in `@media (min-width: 1024px)` (previously they applied
+at every width, including mobile, despite the class name). This looks like
+Roy editing the file directly in parallel. It's a sensible complementary fix
+— it means those compact overrides (and this session's `select.input` fix,
+which now sits inside that same media block) only ever apply at desktop
+widths — but **it wasn't made by this agent and hasn't been reviewed by
+it either**. Worth Roy double-checking it did what he intended before this
+branch is committed, since it changes manager-page control sizing on
+mobile (reverts to the larger base `.btn`/`.input` sizes there, which is
+probably the point, but flagging since nobody explicitly asked for that in
+this conversation).
 
 ## What's verified vs. not
-- **Verified:** every DB object (tables, constraints, RLS policies, helper
-  functions, triggers, storage buckets, storage RLS) via direct schema
-  queries and role-simulated checks. `npm run build` passes clean throughout.
-  New UI layout (Phase 3's period-anchor selects, Phase 4's parts form) was
-  screenshot-verified via a Playwright/Chromium+WebKit repro against the real
-  compiled CSS before being called done — this was learned the hard way after
-  first shipping a Safari-only select-arrow bug and a flexbox width bug
-  without actually rendering anything.
-- **NOT verified by this agent:** a from-scratch phone-OTP click-through.
-  This agent session cannot receive SMS, so it can never log in as a real
-  user — Roy has done this verification himself for Phases 3-4 already (see
-  above); anything built in a *future* session still needs the same manual
-  check from him before being trusted end-to-end.
+- **Verified:** `npm run build` clean after every change. Full click-through
+  via Playwright/Chromium against the real dev server, logged in with a real
+  phone-OTP session (test creds below) — mobile screenshot confirmed
+  pixel-identical to the pre-change original, desktop split-console screenshotted
+  at 1024px and 1440px with no horizontal overflow, other admin tabs
+  (לקוחות, ראשי צוות, קטלוג חלקים) reshot to confirm no regression, part-detail
+  expand and QR print popup both screenshotted working, search filtering
+  screenshotted both for a match and a no-match state, select-arrow fix
+  confirmed via a high-DPI element screenshot before/after.
+- **NOT verified:** nothing has been committed, so there's no PR/CI signal
+  yet. The QR print popup's `window.print()` call was confirmed to fire
+  without console errors and the popup's content was screenshotted, but
+  actual physical/PDF print output was not inspected (headless browser can't
+  show a print preview). Roy hasn't reviewed this session's work in his own
+  browser yet — only the earlier rejected concept was reviewed live before
+  the pivot.
+
+## Test credentials (local dev only)
+Real Supabase phone-OTP login, no bypass exists: phone `0503338181`, OTP
+`123456`. `npm run dev`, then `/manager/settings` → `תחזוקת מכונות`.
 
 ## What's next
-**Phase 5 — client-side self-provisioning + access-check helper.** Run it
-from `enbar-app - PRD/enbar-maintenance-module-implementation-plan.md`, the
-"Phase 5" block. Small, deliberately minimal phase: no server function, no
-admin action, no new secret — just a client-side insert-and-catch against
-Phase 1's existing self-provisioning RLS policy, plus a small shared
-access-check helper for Phase 6/7 to call. Read PRD §4.0 in full first; it's
-easy to over-build this one.
+1. Roy reviews this session's actual UI (not just this document) in his own
+   browser — desktop split console, part-detail expand, QR print popup,
+   search, and the select-arrow fix.
+2. Confirm the external `@media (min-width: 1024px)` change to
+   `.manager-desktop` in `src/index.css` (see above) was intentional.
+3. If approved: commit (atomic commits per concern — layout, part-details,
+   QR-print, search, CSS fix are five separable changes), open a PR against
+   `main`, merge.
+4. If rejected: revert the branch (per the original task's own stop
+   condition) rather than iterating further blind.
+5. Separately, unrelated to this branch: Phase 5 of the maintenance module
+   (client-side self-provisioning) is still the next backend phase per
+   `enbar-app - PRD/enbar-maintenance-module-implementation-plan.md` — see
+   TODO.md "Next".
 
 ## The one thing to remember
-**Maintenance periods are fixed, not admin-editable.** `maintenance_periods`
-holds exactly 4 seeded rows (שבועי, חודשי, שנתי, תלת שנתי) and there is no
-admin UI anywhere to add, edit, or deactivate one. Any future picker must
-choose from those 4 fixed rows only.
-
-**Tasks are machine-owned text, not a shared catalog.** `machine_period_tasks
-.task_name` is plain text scoped to one machine's period assignment — there
-is no `maintenance_tasks` table anymore (dropped in Phase 2-revision-3), no
-shared task entity, and no standalone task-management screen. Autocomplete
-across machines is a wording convenience only, never a link.
-
-Also worth knowing: `תלת שנתי` means **3 times a year** (`schedule_kind =
-'triannual'`, every 4 months), not "once every 3 years" — that cadence was
-renamed to `אחת לשלוש שנים` then deleted outright. Don't conflate the two.
-
-Whenever building a new Storage bucket's upload feature, check
-`pg_policies`/`storage.objects` for that bucket first — Phase 1 created
-`machine-parts` and `fault-reports` without any RLS policies on either, and
-the `machine-parts` gap (now fixed) wasn't caught until Phase 4 tried to
-actually upload something.
+This branch only touches `/manager/settings`'s `תחזוקת מכונות` tab and two
+small shared files (`src/index.css`, `src/components/Icons.jsx` for the new
+`QrCodeIcon`). It does not touch data fetching, RLS, other admin tabs, or
+routing — if a future session sees changes beyond `ManagerSettings.jsx`,
+`index.css`, and `Icons.jsx` on this branch, that's scope creep, not
+something intended here.
