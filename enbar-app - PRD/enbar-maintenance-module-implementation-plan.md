@@ -326,10 +326,10 @@ After each completed step: ✅ [what was done] — [file(s) affected]
 Add a parts tab/screen per machine (list + add/edit) covering all fields in PRD §6.5, including photo upload to the machine-parts bucket.
 
 ## Context
-Search the codebase for the existing photo-upload pattern used in the daily-report flow (client-side compression via browser-image-compression) and reuse it.
+Search the codebase for the existing photo-upload pattern used in the daily-report flow (client-side compression via browser-image-compression) and reuse it. Note: Phase 3's CSV import already created machine_parts rows for machines that had a חלקים column — name populated, every other field null. This phase's UI must let those rows be edited to fill in the rest (store, price, SKU, photo, etc.), not just support adding brand-new parts.
 
 ## Target State
-Within a machine's detail, a parts tab lists machine_parts rows and supports add/edit with all PRD §6.5 fields, including a photo uploaded to the machine-parts bucket.
+Within a machine's detail, a parts tab lists machine_parts rows (including the name-only rows Phase 3 already imported) and supports add/edit with all PRD §6.5 fields, including a photo uploaded to the machine-parts bucket.
 
 ## Scope
 - Work only in: the machine detail area built in Phase 3
@@ -356,6 +356,49 @@ After each completed step: ✅ [what was done] — [file(s) affected]
 🎯 Target: Claude Code · 💡 Unchanged from v1.
 
 **Session Strategy:** Continue — needs Phase 3's machine detail structure.
+
+---
+
+## Phase 3-revision — Date picker for yearly/triannual anchor, loosen anchor_day, February 29 shift
+
+```
+## Objective
+Correct the yearly/triannual schedule-anchor UI shipped in Phase 3: two unlabeled number inputs (day, month) read as a duplicate-field bug in the live app. Replace with a single native date input; discard the picker's year, keep only month+day. Loosen machine_periods.anchor_day's CHECK from 1–28 to 1–31 (it was copied from monthly's day-alone logic, which doesn't apply here — yearly/triannual always pick day+month together as one real calendar date). Add a February-29-in-a-non-leap-year shift rule to the next-due-date helper (→ March 1), the one edge case a date picker can't resolve by itself.
+
+## Context
+Read PRD §5 (the two new shift-rule paragraphs) and §9's newest resolved-decision bullet before starting. **Coordinate with whatever branch currently owns the machine-detail component** — if a separate desktop-layout branch is mid-flight and hasn't merged to main yet, confirm with Roy this phase should run after that merge, not in parallel against the same files.
+
+## Target State
+The yearly/triannual anchor input in the machine-period-assignment UI is a single date picker, not two number boxes. Selecting a date stores only its month and day (anchor_month, anchor_day) — the year is never persisted anywhere. machine_periods.anchor_day's CHECK now allows 1–31. The next-due-date helper's yearly/triannual branch, when the anchor is month=2/day=29 and the target year is not a leap year, computes the occurrence as March 1 of that year instead — checked before the existing Saturday-shift rule (the two rules don't compound in a single computation).
+
+## Scope
+- Work only in: the yearly/triannual anchor input component, machine_periods' anchor_day CHECK constraint, and the next-due-date helper function
+- Do NOT touch: the weekly/monthly anchor inputs, day_of_month's existing 1–28 CHECK, any already-set real anchor values (loosening a range doesn't require migrating existing 1–28 data — it's still valid under 1–31)
+
+## Constraints
+- The date picker's year must never be read, stored, or used in any computation — only month and day
+- Only make changes directly requested
+
+## Acceptance Criteria
+- [ ] The yearly/triannual anchor UI is one date picker, not two number inputs
+- [ ] Picking a date and saving persists only month+day; re-opening the form shows the same month+day regardless of what year was shown in the picker
+- [ ] anchor_day now accepts 31, rejects 32+ and 0
+- [ ] A yearly/triannual period anchored on Feb 29, computed for a non-leap target year, resolves to March 1 of that year
+- [ ] Existing machine_periods rows with anchor_day 1–28 are unaffected (no data migration needed, verified by re-reading a few real rows Roy already set)
+- [ ] Monthly's day_of_month input and its 1–28 CHECK are untouched
+
+## Stop Conditions
+Stop and ask before:
+- Touching the monthly anchor input or its CHECK
+- Proceeding if a separate branch has uncommitted changes to the same component
+
+## Progress
+After each completed step: ✅ [what was done] — [file/table affected]
+```
+
+🎯 Target: Claude Code · 💡 Explicitly makes branch-collision awareness a stop condition, not just a note, since this phase's own scope overlaps a real in-flight branch Roy is currently reviewing.
+
+**Session Strategy:** Continue — needs Phase 3's machine detail structure and the next-due-date helper. Run only after the desktop-layout branch is merged.
 
 ---
 

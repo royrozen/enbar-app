@@ -105,10 +105,12 @@ Each `machine_periods` row carries its own due date, computed from a fixed sched
 Anchor field used depends on the period's `schedule_kind`:
 - **weekly** → a day of the week (Sunday–Friday only — the factory's work week)
 - **monthly** → a day of the month (1–28, to avoid short-month ambiguity)
-- **triannual** (`תלת שנתי` — 3 times a year, every 4 months) → an anchor month + day of month; the next two occurrences are 4 and 8 months later, wrapping the year
-- **yearly** (`שנתי` — once a year, `interval_years = 1`) → an exact month+day anchor date
+- **triannual** (`תלת שנתי` — 3 times a year, every 4 months) → an anchor month + day, picked via a single date picker (§7.1) — the year shown in the picker is discarded, only month+day is kept; the next two occurrences are 4 and 8 months later, wrapping the year
+- **yearly** (`שנתי` — once a year, `interval_years = 1`) → an exact month+day anchor, same date-picker UI as triannual
 
 **Saturday shift rule:** weekly periods can't land on Saturday at all (the weekday picker only offers Sunday–Friday). For monthly, triannual, and yearly periods, if the computed due date falls on a Saturday, it shifts forward to the following Sunday — applied every time `next_due_date` is computed, both on initial assignment and on every advance-on-completion.
+
+**February 29 shift rule (triannual/yearly only):** because the anchor day/month are picked together as a real calendar date, an admin can anchor on February 29 (the date picker only offers it when its own displayed year happens to be a leap year — the picker's year is otherwise discarded, see above). In any actual non-leap year, the computed occurrence shifts forward to March 1 that year — same shift-forward pattern as the Saturday rule, checked before it (a Feb-29→Mar-1 shift can't itself land on a Saturday needing a second shift, since date math is applied once per computation).
 
 ### "Missed" is derived, not a stored flag
 Because `next_due_date` only moves forward on full completion, **"missed" = `next_due_date` is in the past**. No separate status field or cron job needed — the same computed field powers "what's due this week," "what's overdue," and the manager's missed-machines report. There is no grace period: a period becomes missed the day after its due date if not fully closed.
@@ -172,8 +174,8 @@ CREATE TABLE machine_periods (
   period_id uuid NOT NULL REFERENCES maintenance_periods(id),
   weekday integer CHECK (weekday BETWEEN 0 AND 5),      -- 0=Sunday..5=Friday, set when schedule_kind='weekly'
   day_of_month integer CHECK (day_of_month BETWEEN 1 AND 28), -- set when schedule_kind='monthly'
-  anchor_month integer CHECK (anchor_month BETWEEN 1 AND 12), -- set when schedule_kind='yearly'
-  anchor_day integer CHECK (anchor_day BETWEEN 1 AND 28),     -- set when schedule_kind='yearly'
+  anchor_month integer CHECK (anchor_month BETWEEN 1 AND 12), -- set when schedule_kind='yearly' or 'triannual'
+  anchor_day integer CHECK (anchor_day BETWEEN 1 AND 31),     -- set when schedule_kind='yearly' or 'triannual'; 29-31 valid because month+day are picked together as a real calendar date (via a date picker in the UI — §7.1), unlike monthly's day-alone ambiguity
   next_due_date date NOT NULL,                          -- advances only on full completion; drives due/missed/this-week
   is_active boolean NOT NULL DEFAULT true,
   deleted_at timestamptz,
@@ -319,7 +321,7 @@ CREATE TABLE fault_report_parts (             -- optional, multi
 ### 7.1 Admin — תחזוקת מכונות (new top-level tab under `/manager/settings`)
 This replaces what was four separate ideas across earlier drafts (a standalone periods tab, a standalone `/manager/machines` area, a machine-nested parts tab, and a standalone tasks tab) with **one flat tab** — no nested sub-tab bar, since machines is the only thing left in it once tasks and periods both stopped being independent destinations.
 
-- **Machines list** — `#{machine_no}` zero-padded, name, location, active toggle, add/edit, per-machine period assignment (pick from the fixed four-period list — §6.1/§9 — set its schedule anchor), and QR display for printing.
+- **Machines list** — `#{machine_no}` zero-padded, name, location, active toggle, add/edit, per-machine period assignment (pick from the fixed four-period list — §6.1/§9 — set its schedule anchor: a weekday picker for weekly, a day-of-month field for monthly, a single date picker for yearly/triannual with the picker's year discarded and only month+day kept), and QR display for printing.
 - **Tasks are added inline, per machine period — never from a standalone screen.** Opening a machine's period assignment shows a task list owned by that machine (§6.3 — `machine_period_tasks.task_name`, plain text). Adding a task offers autocomplete against task text already used on *other* machines (`SELECT DISTINCT task_name`), purely for consistent wording — it is not a shared entity, and editing a task under one machine never touches any other machine's row. There is no "add a task" action anywhere outside a machine's own detail.
 - **Parts** live inside a specific machine's own detail view too, same reasoning — a part only makes sense in the context of one machine (§7.2).
 - **No periods-management UI at all.** Periods are fixed/seeded (§6.1) — Roy's explicit decision. The four periods (`שבועי`, `חודשי`, `שנתי`, `תלת שנתי`) are chosen from a fixed list wherever a period needs to be picked, never added/edited/deactivated through any screen.
@@ -376,6 +378,7 @@ RLS on every new table is **`authenticated`-only**, matching the rest of the app
 - **New frequency: `תלת שנתי` = 3 times a year, not "once every 3 years."** This is a genuine redefinition — the term was originally used (in Roy's own first message and the original schema) for a once-per-3-years cadence. That cadence was briefly renamed to `אחת לשלוש שנים` to resolve the ambiguity, then **deleted outright** on Roy's later instruction — it isn't a period the module needs. `תלת שנתי` is reserved going forward for the 3x/year (~every 4 months) cadence, its own `schedule_kind` (`'triannual'`), reusing the `anchor_month`/`day_of_month` fields with occurrences every 4 months. The final fixed catalog is four rows: `שבועי`, `חודשי`, `שנתי` (plain once-a-year — restored after being accidentally dropped from an earlier edit of this document), `תלת שנתי`.
 - **Admin navigation restructured — corrected twice after Phase 2 shipped.** First pass: collapsed a periods tab, a standalone `/manager/machines` area, and a machine-nested parts tab into one parent tab, `תחזוקת מכונות`, with `מכונות` and `משימות תחזוקה` as sub-tabs. Second pass, after reviewing Roy's real machine/task mapping (a CSV of the actual 21 machines and their tasks): `משימות תחזוקה` isn't a destination at all — a task only exists in the context of a specific machine's period, added inline there with autocomplete (§6.3, §7.1), never from any standalone screen. With that gone, the parent-tab-with-sub-tabs structure had only one child left, so it collapsed further into a single flat `תחזוקת מכונות` tab (the machines list itself). The employees-tab access toggle was never part of any of this.
 - **Real machine/task data available.** Roy provided a CSV mapping all 21 real machines, their parts, and their per-period tasks (`מיפוי_מכונות_Enbar_-_מכונות.csv`) — confirms the task-ownership model above and is a natural seed-data source for Phase 3 instead of manual entry, if Roy wants to import it rather than type all 21 machines by hand.
+- **Yearly/triannual anchor UI switched to a date picker — found after Phase 3 shipped.** Two unlabeled number inputs (day, month) looked like a duplicate-field bug in the live UI. Switched to a single native date input; the picker's year is discarded, only month+day is kept. This exposed that `anchor_day`'s original `1–28` constraint (copied from monthly's day-alone logic) was needlessly restrictive for yearly/triannual, where day and month are always picked together as a real calendar date — loosened to `1–31`, with a new February-29-in-a-non-leap-year shift rule (→ March 1, same pattern as the Saturday shift) covering the one remaining edge case a date picker can't resolve on its own.
 
 ## 10. Out of scope (explicit)
 
