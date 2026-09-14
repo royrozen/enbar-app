@@ -19,7 +19,7 @@ import {
   CameraIcon,
 } from "../components/Icons";
 import { supabase, PART_PHOTO_BUCKET, machinePartPhotoUrl } from "../lib/supabase";
-import imageCompression from "browser-image-compression";
+import { compressPhoto } from "../components/PhotoUploader";
 import { useAuth } from "../lib/AuthContext";
 import {
   normalizeEmployeePhone,
@@ -200,6 +200,34 @@ function useAdminList(table, select = "*") {
   }
 
   return { items, error, setError, load, toggleActive, softDelete };
+}
+
+// Same is_active/soft-delete shape as useAdminList, but for a single row a
+// parent component already fetched as part of a larger nested tree (e.g. one
+// machine's own parts, one machine within a manually-loaded machines list) —
+// so it takes the row's id directly rather than owning a list/load() itself.
+function useSoftDeletable(table, id, onChanged) {
+  const [busy, setBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
+  async function toggleActive(isActive) {
+    setBusy(true);
+    await supabase.from(table).update({ is_active: !isActive }).eq("id", id);
+    setBusy(false);
+    onChanged();
+  }
+
+  async function remove() {
+    setDeleteBusy(true);
+    await supabase
+      .from(table)
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", id);
+    setDeleteBusy(false);
+    onChanged();
+  }
+
+  return { busy, deleteBusy, toggleActive, remove };
 }
 
 const emptyProjectForm = {
@@ -1640,33 +1668,6 @@ const emptyPartForm = {
   quantity: "",
 };
 
-function partFormToRow(form) {
-  return {
-    name: form.name.trim(),
-    store_name: form.store_name.trim() || null,
-    store_phone: form.store_phone.trim() || null,
-    store_sku: form.store_sku.trim() || null,
-    purchase_price: form.purchase_price === "" ? null : Number(form.purchase_price),
-    purchase_date: form.purchase_date || null,
-    shelf_location: form.shelf_location.trim() || null,
-    quantity: form.quantity === "" ? null : Number(form.quantity),
-  };
-}
-
-async function compressPartPhoto(file) {
-  try {
-    return await imageCompression(file, {
-      maxWidthOrHeight: 1600,
-      maxSizeMB: 1.2,
-      useWebWorker: true,
-      fileType: "image/jpeg",
-      initialQuality: 0.85,
-    });
-  } catch {
-    return file;
-  }
-}
-
 function PartPhotoPicker({ preview, onChange }) {
   const inputRef = useRef(null);
 
@@ -1674,8 +1675,7 @@ function PartPhotoPicker({ preview, onChange }) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    const compressed = await compressPartPhoto(file);
-    onChange(compressed);
+    onChange(await compressPhoto(file));
   }
 
   return (
@@ -1726,7 +1726,16 @@ function PartForm({ machineId, initial, onDone, onCancel, submitLabel }) {
       return;
     }
     setBusy(true);
-    const row = partFormToRow(form);
+    const row = {
+      name: form.name.trim(),
+      store_name: form.store_name.trim() || null,
+      store_phone: form.store_phone.trim() || null,
+      store_sku: form.store_sku.trim() || null,
+      purchase_price: form.purchase_price === "" ? null : Number(form.purchase_price),
+      purchase_date: form.purchase_date || null,
+      shelf_location: form.shelf_location.trim() || null,
+      quantity: form.quantity === "" ? null : Number(form.quantity),
+    };
 
     if (initial?.id) {
       const { error: err } = await supabase
@@ -1892,28 +1901,11 @@ function PartForm({ machineId, initial, onDone, onCancel, submitLabel }) {
 
 function PartRow({ part, onChanged }) {
   const [editing, setEditing] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [deleteBusy, setDeleteBusy] = useState(false);
-
-  async function toggleActive() {
-    setBusy(true);
-    await supabase
-      .from("machine_parts")
-      .update({ is_active: !part.is_active })
-      .eq("id", part.id);
-    setBusy(false);
-    onChanged();
-  }
-
-  async function remove() {
-    setDeleteBusy(true);
-    await supabase
-      .from("machine_parts")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", part.id);
-    setDeleteBusy(false);
-    onChanged();
-  }
+  const { busy, deleteBusy, toggleActive, remove } = useSoftDeletable(
+    "machine_parts",
+    part.id,
+    onChanged,
+  );
 
   if (editing) {
     return (
@@ -1964,7 +1956,11 @@ function PartRow({ part, onChanged }) {
             .join(" · ")}
         </p>
       </div>
-      <ActiveToggle item={part} onToggle={toggleActive} busy={busy} />
+      <ActiveToggle
+        item={part}
+        onToggle={() => toggleActive(part.is_active)}
+        busy={busy}
+      />
       <button
         className="btn btn-ghost text-sm !min-h-[30px] !p-1.5"
         onClick={() => setEditing(true)}
@@ -2027,9 +2023,13 @@ function MachineCard({
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState(emptyMachineForm);
   const [editError, setEditError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [saveBusy, setSaveBusy] = useState(false);
   const [detailTab, setDetailTab] = useState("periods");
+  const { busy, deleteBusy, toggleActive, remove } = useSoftDeletable(
+    "machines",
+    machine.id,
+    onChanged,
+  );
 
   function startEdit() {
     setEditForm({ name: machine.name, location: machine.location || "" });
@@ -2042,7 +2042,7 @@ function MachineCard({
       setEditError("יש להזין שם מכונה");
       return;
     }
-    setBusy(true);
+    setSaveBusy(true);
     const { error: err } = await supabase
       .from("machines")
       .update({
@@ -2050,32 +2050,12 @@ function MachineCard({
         location: editForm.location.trim() || null,
       })
       .eq("id", machine.id);
-    setBusy(false);
+    setSaveBusy(false);
     if (err) {
       setEditError("השמירה נכשלה — נסו שוב");
       return;
     }
     setEditing(false);
-    onChanged();
-  }
-
-  async function toggleActive() {
-    setBusy(true);
-    await supabase
-      .from("machines")
-      .update({ is_active: !machine.is_active })
-      .eq("id", machine.id);
-    setBusy(false);
-    onChanged();
-  }
-
-  async function remove() {
-    setDeleteBusy(true);
-    await supabase
-      .from("machines")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", machine.id);
-    setDeleteBusy(false);
     onChanged();
   }
 
@@ -2122,15 +2102,15 @@ function MachineCard({
             <div className="sm:col-span-2 flex gap-2">
               <button
                 className="btn btn-outline text-sm !min-h-[34px]"
-                disabled={busy}
+                disabled={saveBusy}
                 onClick={saveEdit}
               >
-                {busy ? <SpinnerIcon size={16} /> : <CheckIcon size={16} />}
+                {saveBusy ? <SpinnerIcon size={16} /> : <CheckIcon size={16} />}
                 שמירה
               </button>
               <button
                 className="btn btn-ghost text-sm !min-h-[34px]"
-                disabled={busy}
+                disabled={saveBusy}
                 onClick={() => setEditing(false)}
               >
                 <XIcon size={16} />
@@ -2151,7 +2131,11 @@ function MachineCard({
                 </span>
               )}
             </p>
-            <ActiveToggle item={machine} onToggle={toggleActive} busy={busy} />
+            <ActiveToggle
+              item={machine}
+              onToggle={() => toggleActive(machine.is_active)}
+              busy={busy}
+            />
             <button
               className="btn btn-ghost text-sm !min-h-[34px]"
               onClick={startEdit}
