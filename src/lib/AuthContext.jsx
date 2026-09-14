@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from './supabase'
-import { fetchProfile, signOut as authSignOut } from './auth'
+import { fetchProfile, provisionFactoryWorker, signOut as authSignOut } from './auth'
 
 const AuthCtx = createContext(null)
 const VIEW_AS_KEY = 'enbar_view_as_team_lead'
@@ -42,7 +42,15 @@ export function AuthProvider({ children }) {
         setProfile(null)
         return
       }
-      const p = await fetchProfile(session.user.id)
+      let p = await fetchProfile(session.user.id)
+      if (!p) {
+        // No profile yet — try factory-worker self-provisioning (PRD §4.0)
+        // before giving up. If Postgres rejects the insert (phone not a
+        // matching, active, access-enabled employee), p stays null below.
+        const provisioned = await provisionFactoryWorker(session)
+        if (cancelled) return
+        if (provisioned) p = await fetchProfile(session.user.id)
+      }
       if (cancelled) return
       if (!p) {
         setAuthError('אין לך הרשאה לגשת לאפליקציה. פנה למנהל המערכת.')

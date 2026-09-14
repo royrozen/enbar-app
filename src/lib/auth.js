@@ -23,6 +23,27 @@ export async function fetchProfile(userId) {
   return data || null
 }
 
+// First-login self-provisioning for factory workers (PRD §4.0). Runs under
+// the user's own ordinary session — resolve_own_employee() and the
+// `factory_worker self-provision` RLS INSERT policy on `profiles` are the
+// actual gate; this is just the client-side attempt. Returns true if a
+// profiles row now exists (freshly created or resolved to nothing to try),
+// false if Postgres rejected it (phone not a matching, active,
+// access-enabled employee).
+export async function provisionFactoryWorker(session) {
+  const { data: matches } = await supabase.rpc('resolve_own_employee')
+  const match = matches?.[0]
+  if (!match) return false
+  const { error } = await supabase.from('profiles').insert({
+    id: session.user.id,
+    role: 'factory_worker',
+    phone: session.user.phone,
+    employee_id: match.employee_id,
+    display_name: match.display_name,
+  })
+  return !error
+}
+
 export function signOut() {
   return supabase.auth.signOut()
 }
