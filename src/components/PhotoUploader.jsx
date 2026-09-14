@@ -4,6 +4,22 @@ import { CameraIcon, TrashIcon, SpinnerIcon } from './Icons'
 
 const MAX_FILE_MB = 10
 
+// Client-side compression before upload (~1600px). Shared with any other
+// single/multi-photo upload flow in the app (e.g. machine-parts photos).
+export async function compressPhoto(file) {
+  try {
+    return await imageCompression(file, {
+      maxWidthOrHeight: 1600,
+      maxSizeMB: 1.2,
+      useWebWorker: true,
+      fileType: 'image/jpeg',
+      initialQuality: 0.85,
+    })
+  } catch {
+    return file
+  }
+}
+
 // photos: [{ id, file, preview }]
 export default function PhotoUploader({ label, hint, photos, onChange, remaining, disabled }) {
   const inputRef = useRef(null)
@@ -37,19 +53,7 @@ export default function PhotoUploader({ label, hint, photos, onChange, remaining
         setError(`תמונה גדולה מ־${MAX_FILE_MB}MB דולגה`)
         continue
       }
-      let finalFile = file
-      try {
-        // Client-side compression before upload (~1600px)
-        finalFile = await imageCompression(file, {
-          maxWidthOrHeight: 1600,
-          maxSizeMB: 1.2,
-          useWebWorker: true,
-          fileType: 'image/jpeg',
-          initialQuality: 0.85,
-        })
-      } catch {
-        // If compression fails, fall back to the original file
-      }
+      const finalFile = await compressPhoto(file)
       added.push({
         id: crypto.randomUUID(),
         file: finalFile,
