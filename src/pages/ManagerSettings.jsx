@@ -17,8 +17,11 @@ import {
   DownloadIcon,
   FactoryIcon,
   CameraIcon,
+  QrCodeIcon,
+  SearchIcon,
 } from "../components/Icons";
 import { supabase, PART_PHOTO_BUCKET, machinePartPhotoUrl } from "../lib/supabase";
+import { LOGO_URL } from "../components/Logo";
 import { compressPhoto } from "../components/PhotoUploader";
 import { useAuth } from "../lib/AuthContext";
 import {
@@ -1288,6 +1291,8 @@ function describeAnchor(mp, kind) {
   return "";
 }
 
+// Mobile/accordion QR display — inline canvas + PNG download. Desktop pane
+// uses the print-ready sticker flow (printMachineQr) instead, in its header.
 function MachineQr({ machineId, machineNo }) {
   const canvasRef = useRef(null);
 
@@ -1317,6 +1322,75 @@ function MachineQr({ machineId, machineNo }) {
       </button>
     </div>
   );
+}
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
+  );
+}
+
+// Opens a small print-ready window with the machine's QR sticker (logo,
+// machine name/number, QR) and triggers the browser print dialog on it.
+async function printMachineQr(machine) {
+  // Open synchronously, inside the click's own call stack — Safari blocks
+  // window.open() called after an await (post-microtask), treating it as no
+  // longer a direct result of the user gesture. Fill in the content once the
+  // (async) QR render resolves, using the handle we already have.
+  const win = window.open("", "_blank", "width=420,height=560");
+  if (!win) return;
+  const qrDataUrl = await QRCode.toDataURL(machine.id, { width: 320, margin: 1 });
+  const machineNo = String(machine.machine_no).padStart(3, "0");
+  win.document.write(`<!doctype html>
+<html dir="rtl" lang="he">
+<head>
+<meta charset="utf-8" />
+<title>מדבקת QR — מכונה #${machineNo}</title>
+<style>
+  @page { margin: 12mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: Arial, Heebo, system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 24px;
+    text-align: center;
+    color: #16233d;
+  }
+  img.logo { height: 88px; width: auto; object-fit: contain; }
+  .badge {
+    font-family: monospace;
+    font-size: 13px;
+    color: #14284d;
+    border: 1px solid rgba(20, 40, 77, 0.2);
+    background: rgba(20, 40, 77, 0.08);
+    border-radius: 6px;
+    padding: 2px 10px;
+  }
+  h1 { font-size: 22px; margin: 0; }
+  p.sub { font-size: 14px; color: #51637c; margin: 0; }
+  img.qr {
+    width: 240px;
+    height: 240px;
+    border: 1px solid #dce3ec;
+    border-radius: 12px;
+    margin-top: 6px;
+  }
+</style>
+</head>
+<body>
+  <img class="logo" src="${LOGO_URL}" alt="ENBAR" />
+  <span class="badge">#${machineNo}</span>
+  <h1>${escapeHtml(machine.name)}</h1>
+  ${machine.location ? `<p class="sub">${escapeHtml(machine.location)}</p>` : ""}
+  <img class="qr" src="${qrDataUrl}" alt="QR" />
+  <script>window.onload = () => window.print();</script>
+</body>
+</html>`);
+  win.document.close();
 }
 
 function TaskRow({ task, onSaved, onDeleted }) {
@@ -1901,6 +1975,7 @@ function PartForm({ machineId, initial, onDone, onCancel, submitLabel }) {
 
 function PartRow({ part, onChanged }) {
   const [editing, setEditing] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const { busy, deleteBusy, toggleActive, remove } = useSoftDeletable(
     "machine_parts",
     part.id,
@@ -1921,66 +1996,121 @@ function PartRow({ part, onChanged }) {
     );
   }
 
+  const detailRows = [
+    part.quantity != null && ["כמות", String(part.quantity)],
+    part.shelf_location && ["מדף", part.shelf_location],
+    part.store_name && ["חנות", part.store_name],
+    part.store_phone && ["טלפון חנות", part.store_phone],
+    part.store_sku && ["מק״ט בחנות", part.store_sku],
+    part.purchase_price != null && ["מחיר רכישה", `${part.purchase_price} ₪`],
+    part.purchase_date && ["תאריך רכישה", formatDate(part.purchase_date)],
+  ].filter(Boolean);
+
   return (
     <div
-      className={`flex items-center gap-3 rounded-lg border border-border p-2 ${part.is_active ? "" : "opacity-55"}`}
+      className={`rounded-lg border border-border p-2 ${part.is_active ? "" : "opacity-55"}`}
     >
-      {part.photo_storage_path ? (
-        <img
-          src={machinePartPhotoUrl(part.photo_storage_path)}
-          alt=""
-          className="w-12 h-12 rounded-lg object-cover border border-border shrink-0"
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="flex-1 min-w-0 flex items-center gap-3 text-start"
+          aria-expanded={expanded}
+        >
+          {part.photo_storage_path ? (
+            <img
+              src={machinePartPhotoUrl(part.photo_storage_path)}
+              alt=""
+              className="w-12 h-12 rounded-lg object-cover border border-border shrink-0"
+            />
+          ) : (
+            <div className="w-12 h-12 rounded-lg border border-dashed border-border shrink-0 flex items-center justify-center text-primary">
+              <CameraIcon size={18} />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold truncate">
+              <span className="text-primary font-normal">#{part.part_no}</span>{" "}
+              {part.name}
+              {!part.is_active && (
+                <span className="text-xs text-primary font-normal ms-2">
+                  (מושבת)
+                </span>
+              )}
+            </p>
+            <p className="text-xs text-primary truncate">
+              {[
+                part.quantity != null && `כמות: ${part.quantity}`,
+                part.shelf_location && `מדף: ${part.shelf_location}`,
+                part.store_name,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          </div>
+          <ChevronDownIcon
+            size={16}
+            className={`shrink-0 text-primary transition-transform ${expanded ? "rotate-180" : ""}`}
+          />
+        </button>
+        <ActiveToggle
+          item={part}
+          onToggle={() => toggleActive(part.is_active)}
+          busy={busy}
         />
-      ) : (
-        <div className="w-12 h-12 rounded-lg border border-dashed border-border shrink-0 flex items-center justify-center text-primary">
-          <CameraIcon size={18} />
+        <button
+          className="btn btn-ghost text-sm !min-h-[30px] !p-1.5"
+          onClick={() => setEditing(true)}
+          aria-label="עריכה"
+        >
+          <PencilIcon size={16} />
+        </button>
+        <DeleteAction name={part.name} onConfirm={remove} busy={deleteBusy} />
+      </div>
+
+      {expanded && (
+        <div className="mt-2 pt-2 border-t border-border flex gap-3">
+          {part.photo_storage_path && (
+            <img
+              src={machinePartPhotoUrl(part.photo_storage_path)}
+              alt=""
+              className="w-28 h-28 rounded-lg object-cover border border-border shrink-0"
+            />
+          )}
+          {detailRows.length > 0 ? (
+            <dl className="flex-1 min-w-0 grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+              {detailRows.map(([label, value]) => (
+                <div key={label} className="contents">
+                  <dt className="text-primary">{label}</dt>
+                  <dd className="font-medium truncate">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : (
+            <p className="text-sm text-primary">אין פרטים נוספים</p>
+          )}
         </div>
       )}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-bold truncate">
-          <span className="text-primary font-normal">#{part.part_no}</span>{" "}
-          {part.name}
-          {!part.is_active && (
-            <span className="text-xs text-primary font-normal ms-2">
-              (מושבת)
-            </span>
-          )}
-        </p>
-        <p className="text-xs text-primary truncate">
-          {[
-            part.quantity != null && `כמות: ${part.quantity}`,
-            part.shelf_location && `מדף: ${part.shelf_location}`,
-            part.store_name,
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-        </p>
-      </div>
-      <ActiveToggle
-        item={part}
-        onToggle={() => toggleActive(part.is_active)}
-        busy={busy}
-      />
-      <button
-        className="btn btn-ghost text-sm !min-h-[30px] !p-1.5"
-        onClick={() => setEditing(true)}
-        aria-label="עריכה"
-      >
-        <PencilIcon size={16} />
-      </button>
-      <DeleteAction name={part.name} onConfirm={remove} busy={deleteBusy} />
     </div>
   );
 }
 
-function PartsSection({ machineId, parts, onChanged }) {
+function PartsSection({ machineId, parts, onChanged, variant = "list" }) {
   const [showAdd, setShowAdd] = useState(false);
 
   return (
     <div className="flex flex-col gap-2">
-      {parts.map((p) => (
-        <PartRow key={p.id} part={p} onChanged={onChanged} />
-      ))}
+      <div
+        className={
+          variant === "pane"
+            ? "flex flex-col gap-2 xl:grid xl:grid-cols-2 xl:items-start"
+            : "flex flex-col gap-2"
+        }
+      >
+        {parts.map((p) => (
+          <PartRow key={p.id} part={p} onChanged={onChanged} />
+        ))}
+      </div>
       {parts.length === 0 && !showAdd && (
         <p className="text-xs text-primary">אין חלקים עדיין</p>
       )}
@@ -2019,6 +2149,7 @@ function MachineCard({
   periods,
   taskNameOptions,
   onChanged,
+  variant = "list",
 }) {
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState(emptyMachineForm);
@@ -2064,20 +2195,31 @@ function MachineCard({
     (p) => !attachedPeriods.some((mp) => mp.period_id === p.id),
   );
 
+  const Root = variant === "pane" ? "div" : "li";
+  const showDetail = variant === "pane" ? true : expanded;
+
   return (
-    <li className={`card ${machine.is_active ? "" : "opacity-55"}`}>
-      <div className="p-4 flex items-center gap-3 flex-wrap">
-        <button
-          onClick={onToggleExpand}
-          className="flex items-center justify-center w-6 h-6 shrink-0 text-primary hover:text-foreground transition-colors"
-          title={expanded ? "סגירה" : "הצגת פרטים"}
-          aria-expanded={expanded}
-        >
-          <ChevronDownIcon
-            size={18}
-            className={`transition-transform ${expanded ? "rotate-180" : ""}`}
-          />
-        </button>
+    <Root
+      className={
+        variant === "pane"
+          ? `flex flex-col gap-4 ${machine.is_active ? "" : "opacity-55"}`
+          : `card ${machine.is_active ? "" : "opacity-55"}`
+      }
+    >
+      <div className={variant === "pane" ? "flex items-center gap-3 flex-wrap" : "p-4 flex items-center gap-3 flex-wrap"}>
+        {variant === "list" && (
+          <button
+            onClick={onToggleExpand}
+            className="flex items-center justify-center w-6 h-6 shrink-0 text-primary hover:text-foreground transition-colors"
+            title={expanded ? "סגירה" : "הצגת פרטים"}
+            aria-expanded={expanded}
+          >
+            <ChevronDownIcon
+              size={18}
+              className={`transition-transform ${expanded ? "rotate-180" : ""}`}
+            />
+          </button>
+        )}
 
         {editing ? (
           <div className="flex-1 min-w-[240px] grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -2120,6 +2262,24 @@ function MachineCard({
           </div>
         ) : (
           <>
+          {variant === "pane" ? (
+            <p className="flex-1 min-w-0 font-bold truncate flex items-center gap-2">
+              <span className="shrink-0 inline-flex items-center justify-center rounded-md border border-accent/20 bg-accent/10 text-accent font-mono text-xs px-1.5 py-0.5 tabular-nums">
+                {String(machine.machine_no).padStart(3, "0")}
+              </span>
+              <span className="truncate">
+                {machine.name}
+                {machine.location && (
+                  <span className="text-primary font-normal"> · {machine.location}</span>
+                )}
+                {!machine.is_active && (
+                  <span className="text-xs text-primary font-normal ms-2">
+                    (מושבת)
+                  </span>
+                )}
+              </span>
+            </p>
+          ) : (
             <p className="flex-1 min-w-0 font-bold truncate">
               #{String(machine.machine_no).padStart(3, "0")} {machine.name}
               {machine.location && (
@@ -2131,11 +2291,23 @@ function MachineCard({
                 </span>
               )}
             </p>
+          )}
             <ActiveToggle
               item={machine}
               onToggle={() => toggleActive(machine.is_active)}
               busy={busy}
             />
+            {variant === "pane" && (
+              <button
+                type="button"
+                className="btn btn-ghost text-sm !min-h-[34px] !p-1.5"
+                onClick={() => printMachineQr(machine)}
+                aria-label="הדפסת מדבקת QR"
+                title="הדפסת מדבקת QR"
+              >
+                <QrCodeIcon size={16} />
+              </button>
+            )}
             <button
               className="btn btn-ghost text-sm !min-h-[34px]"
               onClick={startEdit}
@@ -2152,10 +2324,18 @@ function MachineCard({
         )}
       </div>
 
-      {expanded && (
-        <div className="border-t border-border p-4 flex flex-col gap-4 sm:flex-row-reverse sm:items-start">
-          <MachineQr machineId={machine.id} machineNo={machine.machine_no} />
-          <div className="flex-1 flex flex-col gap-3">
+      {showDetail && (
+        <div
+          className={
+            variant === "pane"
+              ? ""
+              : "border-t border-border p-4 flex flex-col gap-4 sm:flex-row-reverse sm:items-start"
+          }
+        >
+          {variant === "list" && (
+            <MachineQr machineId={machine.id} machineNo={machine.machine_no} />
+          )}
+          <div className="flex-1 flex flex-col gap-3 min-w-0">
             <div className="flex gap-1">
               {[
                 { key: "periods", label: "מחזורי טיפול" },
@@ -2177,32 +2357,53 @@ function MachineCard({
             </div>
 
             {detailTab === "periods" ? (
-              <>
-                {attachedPeriods.map((p) => (
-                  <PeriodCard
-                    key={p.id}
-                    period={p}
-                    taskNameOptions={taskNameOptions}
-                    onChanged={onChanged}
+              variant === "pane" ? (
+                <>
+                  <div className="flex flex-col gap-3 xl:grid xl:grid-cols-2 xl:items-start">
+                    {attachedPeriods.map((p) => (
+                      <PeriodCard
+                        key={p.id}
+                        period={p}
+                        taskNameOptions={taskNameOptions}
+                        onChanged={onChanged}
+                      />
+                    ))}
+                  </div>
+                  <AddPeriodForm
+                    machineId={machine.id}
+                    availablePeriods={availablePeriods}
+                    onAdded={onChanged}
                   />
-                ))}
-                <AddPeriodForm
-                  machineId={machine.id}
-                  availablePeriods={availablePeriods}
-                  onAdded={onChanged}
-                />
-              </>
+                </>
+              ) : (
+                <>
+                  {attachedPeriods.map((p) => (
+                    <PeriodCard
+                      key={p.id}
+                      period={p}
+                      taskNameOptions={taskNameOptions}
+                      onChanged={onChanged}
+                    />
+                  ))}
+                  <AddPeriodForm
+                    machineId={machine.id}
+                    availablePeriods={availablePeriods}
+                    onAdded={onChanged}
+                  />
+                </>
+              )
             ) : (
               <PartsSection
                 machineId={machine.id}
                 parts={machine.machine_parts.filter((p) => !p.deleted_at)}
                 onChanged={onChanged}
+                variant={variant}
               />
             )}
           </div>
         </div>
       )}
-    </li>
+    </Root>
   );
 }
 
@@ -2211,10 +2412,22 @@ function MachineMaintenanceTab() {
   const [periods, setPeriods] = useState([]);
   const [error, setError] = useState("");
   const [expandedId, setExpandedId] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
   const [addForm, setAddForm] = useState(emptyMachineForm);
   const [addError, setAddError] = useState("");
   const [addBusy, setAddBusy] = useState(false);
+  const [search, setSearch] = useState("");
+
+  // Desktop split-pane selection: keep it pointed at a real machine once the
+  // list loads, and fall back to the first one if the selected machine is
+  // gone (e.g. deleted).
+  useEffect(() => {
+    if (!machines) return;
+    if (!machines.some((m) => m.id === selectedId)) {
+      setSelectedId(machines[0]?.id ?? null);
+    }
+  }, [machines, selectedId]);
 
   async function load() {
     const { data, error: err } = await supabase
@@ -2236,6 +2449,16 @@ function MachineMaintenanceTab() {
       .order("sort_order")
       .then(({ data }) => setPeriods(data || []));
   }, []);
+
+  const filteredMachines = (machines || []).filter((m) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      m.name.toLowerCase().includes(q) ||
+      String(m.machine_no).padStart(3, "0").includes(q) ||
+      (m.location || "").toLowerCase().includes(q)
+    );
+  });
 
   const taskNameOptions = Array.from(
     new Set(
@@ -2272,6 +2495,7 @@ function MachineMaintenanceTab() {
     setShowAdd(false);
     await load();
     setExpandedId(data.id);
+    setSelectedId(data.id);
   }
 
   return (
@@ -2330,8 +2554,23 @@ function MachineMaintenanceTab() {
 
       {error && <p className="err">{error}</p>}
 
-      <ul className="flex flex-col gap-3">
-        {(machines || []).map((m) => (
+      <div className="relative">
+        <SearchIcon
+          size={18}
+          className="absolute top-1/2 -translate-y-1/2 start-3 text-primary pointer-events-none"
+        />
+        <input
+          type="text"
+          className="input !ps-10"
+          placeholder="חיפוש מכונה לפי שם, מספר או מיקום..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+
+      {/* Mobile / tablet: accordion list, unchanged. */}
+      <ul className="flex flex-col gap-3 lg:hidden">
+        {filteredMachines.map((m) => (
           <MachineCard
             key={m.id}
             machine={m}
@@ -2344,6 +2583,11 @@ function MachineMaintenanceTab() {
             onChanged={load}
           />
         ))}
+        {machines?.length > 0 && filteredMachines.length === 0 && (
+          <li className="card p-6 text-center text-primary">
+            לא נמצאו מכונות התואמות לחיפוש
+          </li>
+        )}
         {machines?.length === 0 && (
           <li className="card p-6 text-center text-primary">
             אין מכונות עדיין
@@ -2355,6 +2599,86 @@ function MachineMaintenanceTab() {
           </li>
         )}
       </ul>
+
+      {/* Desktop: split console — machine roster on one side, full detail
+          for the selected machine always visible on the other. */}
+      <div className="hidden lg:flex gap-4 items-start">
+        <ul className="w-72 shrink-0 card p-1.5 flex flex-col gap-0.5 max-h-[75vh] overflow-y-auto">
+          {filteredMachines.map((m) => (
+            <li key={m.id}>
+              <button
+                type="button"
+                onClick={() => setSelectedId(m.id)}
+                className={`w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-start transition-colors duration-150 ${
+                  selectedId === m.id
+                    ? "bg-accent text-white"
+                    : "hover:bg-muted text-foreground"
+                }`}
+              >
+                <span
+                  className={`shrink-0 w-1.5 h-1.5 rounded-full ${
+                    m.is_active
+                      ? selectedId === m.id
+                        ? "bg-white"
+                        : "bg-success"
+                      : selectedId === m.id
+                        ? "bg-white/40"
+                        : "bg-border"
+                  }`}
+                />
+                <span
+                  className={`shrink-0 font-mono text-xs tabular-nums ${
+                    selectedId === m.id ? "text-white/80" : "text-primary"
+                  }`}
+                >
+                  {String(m.machine_no).padStart(3, "0")}
+                </span>
+                <span className="flex-1 min-w-0 truncate font-bold">
+                  {m.name}
+                </span>
+              </button>
+            </li>
+          ))}
+          {machines?.length > 0 && filteredMachines.length === 0 && (
+            <li className="p-4 text-center text-sm text-primary">
+              לא נמצאו מכונות
+            </li>
+          )}
+          {machines?.length === 0 && (
+            <li className="p-4 text-center text-sm text-primary">
+              אין מכונות עדיין
+            </li>
+          )}
+          {machines === null && (
+            <li className="flex justify-center py-8 text-primary">
+              <SpinnerIcon size={24} />
+            </li>
+          )}
+        </ul>
+
+        <div className="flex-1 min-w-0 card p-4">
+          {(() => {
+            const selected = (machines || []).find((m) => m.id === selectedId);
+            if (!selected) {
+              return (
+                <p className="text-center text-primary py-8">
+                  {machines === null ? "" : "בחרו מכונה כדי להציג פרטים"}
+                </p>
+              );
+            }
+            return (
+              <MachineCard
+                key={selected.id}
+                machine={selected}
+                periods={periods}
+                taskNameOptions={taskNameOptions}
+                onChanged={load}
+                variant="pane"
+              />
+            );
+          })()}
+        </div>
+      </div>
     </div>
   );
 }
