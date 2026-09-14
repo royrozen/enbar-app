@@ -1583,6 +1583,12 @@ const emptyPeriodAnchor = {
   anchor_day: 1,
 };
 
+// Yearly/triannual anchors are month+day only, no year — but a native
+// <input type="date"> needs a full date to display. 2024 is a leap year so
+// Feb 29 is always selectable regardless of the real current year; the year
+// itself is discarded on every read (see onChange below).
+const ANCHOR_PICKER_YEAR = 2024;
+
 function AddPeriodForm({ machineId, availablePeriods, onAdded }) {
   const [form, setForm] = useState(emptyPeriodAnchor);
   const [busy, setBusy] = useState(false);
@@ -1690,33 +1696,17 @@ function AddPeriodForm({ machineId, availablePeriods, onAdded }) {
       )}
 
       {(kind === "triannual" || kind === "yearly") && (
-        <>
-          <input
-            type="number"
-            min={1}
-            max={12}
-            className="input !min-h-[30px] !w-16"
-            value={form.anchor_month}
-            onChange={(e) =>
-              setForm((f) => ({
-                ...f,
-                anchor_month: Number(e.target.value),
-              }))
-            }
-            aria-label="חודש"
-          />
-          <input
-            type="number"
-            min={1}
-            max={28}
-            className="input !min-h-[30px] !w-16"
-            value={form.anchor_day}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, anchor_day: Number(e.target.value) }))
-            }
-            aria-label="יום"
-          />
-        </>
+        <input
+          type="date"
+          className="input !min-h-[30px] !w-auto"
+          value={`${ANCHOR_PICKER_YEAR}-${String(form.anchor_month).padStart(2, "0")}-${String(form.anchor_day).padStart(2, "0")}`}
+          onChange={(e) => {
+            if (!e.target.value) return;
+            const [, m, d] = e.target.value.split("-").map(Number);
+            setForm((f) => ({ ...f, anchor_month: m, anchor_day: d }));
+          }}
+          aria-label="תאריך עוגן (חודש ויום בלבד — השנה אינה נשמרת)"
+        />
       )}
 
       <button className="btn btn-outline text-sm !min-h-[30px]" disabled={busy}>
