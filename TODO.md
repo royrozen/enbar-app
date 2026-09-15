@@ -1,11 +1,11 @@
 # TODO
 
 ## Now
-- (none — Phase 5 below is built and verified at the DB/RLS level; needs a real end-to-end OTP login check before merge, see Next)
+- Review + PR + merge branch `feat/maintenance-checklist-flow` (Phase 6: field checklist flow at `/maintenance/:machineId`) — built, build-clean, both new DB functions verified role-simulated against the dev DB, and click-through confirmed by Roy in a real logged-in browser. Not yet pushed.
 
 ## Next
-- Review + PR + merge branch `feat/factory-worker-self-provisioning` (Phase 5: factory_worker self-provisioning + module access-check helper) — an agent session can't receive real SMS, so the happy-path login (phone `0503332121`, employee "לב קושב") needs Roy to actually run it once, end to end, before merging. DB-level mechanics (the RLS insert, both rejection cases, and the live access-toggle re-check) are already verified directly against the dev DB.
-- Maintenance module Phases 6-8 (field checklist flow, fault report flow, manager reports) — see the implementation plan for each phase's own spec
+- Maintenance module Phase 7 (fault report flow, `/maintenance/:machineId/fault`) — **Phase 6 already renders the `דיווח תקלה / שבר` link, so that path currently falls through App.jsx's catch-all to the login screen until Phase 7 lands.** Phase 7 also needs the `fault-reports` bucket policy fix listed below.
+- Maintenance module Phase 8 (manager reports) — there is currently **no manager-facing UI at all** for checklist submissions; managers already have SELECT-all RLS on `maintenance_visits`/`machine_period_logs`/`machine_period_log_tasks`, but nothing surfaces them, so submitted checklists are only visible via direct DB query.
 - `fault-reports` Storage bucket has no `storage.objects` RLS policies (same gap `machine-parts` had, fixed in Phase 4) — needs the same fix (public read + factory_manager/platform_admin insert) whenever the fault-report flow (Phase 7) is built, since uploads to it will otherwise fail silently
 - Live browser click-through of Phases 1/2/2-revision on the Vercel preview — not yet done (phone-OTP login isn't testable in an agent session; only build + role-simulated DB checks were run)
 - Auth Phase 1: complete Twilio Alphanumeric Sender ID approval, wire Supabase Auth phone OTP end-to-end
@@ -22,6 +22,7 @@
 - תחזוקת מכונות add-period form (`AddPeriodForm` in `src/pages/ManagerSettings.jsx`): collapse the separate select + "+ הוספה" submit button into one control — pick a period from the "הוספת מחזור טיפול" dropdown and have it add immediately (or open the anchor inputs inline), no extra button click. Cosmetic, deferred by Roy.
 
 ## Done
+- Maintenance module Phase 5 (branch `feat/factory-worker-self-provisioning`, merged to `main` 2026-09-14 as PR #4): factory_worker self-provisioning on first OTP login + `getModuleAccess()` helper + `resolve_own_employee()`. Roy ran the real OTP login as `0503332121` (לב קושב) on 2026-09-15 and the `profiles` row was created correctly (`role=factory_worker`, employee linked, display name set). See CHANGELOG.md.
 - Maintenance module Phase 3-revision (branch `fix/period-anchor-datepicker`, merged to `main` 2026-09-14): yearly/triannual schedule-anchor UI switched from two number inputs to a single date picker (year discarded, only month+day kept); `machine_periods.anchor_day` CHECK loosened 1-28 → 1-31; `compute_next_due_date()` gained a Feb-29-in-a-non-leap-year → March 1 shift. See CHANGELOG.md for full detail.
 - Desktop layout for `תחזוקת מכונות` (branch `fix/settings-desktop-layout`, merged to `main` 2026-09-14): split-console layout at `lg:`, part-detail expand on click, QR-print popup replacing the inline canvas, machine search, and the `.manager-desktop select.input` padding-specificity fix. See CHANGELOG.md for full detail.
 - CLAUDE.md's "No real authentication (Phase 1 by design)" section rewritten (2026-09-14): replaced the stale profile-picker/shared-password description with the real phone-OTP flow (`src/pages/Login.jsx`, `src/lib/AuthContext.jsx`, `RequireProfile`/`RequireManager`/`RequireFactoryManager` in `App.jsx`). Noted `src/lib/profile.js` and `src/pages/ProfilePicker.jsx` are gone/unused. Other CLAUDE.md sections (data model, routing) may still drift from code — not audited this pass.
