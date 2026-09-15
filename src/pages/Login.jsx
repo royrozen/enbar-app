@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import Logo from '../components/Logo'
 import { SpinnerIcon } from '../components/Icons'
 import { normalizePhone, sendOtp, verifyOtp } from '../lib/auth'
@@ -9,6 +9,7 @@ const RESEND_SECONDS = 60
 
 export default function Login() {
   const { session, profile, loading, authError, clearAuthError } = useAuth()
+  const location = useLocation()
   const [step, setStep] = useState('phone')
   const [phoneInput, setPhoneInput] = useState('')
   const [phone, setPhone] = useState('')
@@ -35,9 +36,11 @@ export default function Login() {
     )
   }
 
-  // Already have a valid session + profile — skip straight to the right home screen.
+  // Already have a valid session + profile — return to wherever RequireProfile
+  // intercepted from (e.g. a scanned machine QR), or the role's default home.
   if (session && profile) {
-    return <Navigate to={profile.role === 'team_lead' ? '/home' : '/manager'} replace />
+    const from = location.state?.from
+    return <Navigate to={from || (profile.role === 'team_lead' ? '/home' : '/manager')} replace />
   }
 
   async function submitPhone(e) {

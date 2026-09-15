@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/AuthContext'
 import { SpinnerIcon } from './components/Icons'
 import Login from './pages/Login'
@@ -18,6 +18,7 @@ import SignRequest from './pages/SignRequest'
 import Lunch from './pages/Lunch'
 import LunchToday from './pages/LunchToday'
 import ManagerLunchReport from './pages/ManagerLunchReport'
+import Maintenance from './pages/Maintenance'
 
 function AuthLoading() {
   return (
@@ -29,8 +30,9 @@ function AuthLoading() {
 
 function RequireProfile({ children }) {
   const { session, profile, loading } = useAuth()
+  const location = useLocation()
   if (loading) return <AuthLoading />
-  if (!session || !profile) return <Navigate to="/" replace />
+  if (!session || !profile) return <Navigate to="/" state={{ from: location.pathname }} replace />
   return children
 }
 
@@ -68,6 +70,7 @@ export default function App() {
         <Route path="/parts/new" element={<RequireProfile><PartRequestNew /></RequireProfile>} />
         <Route path="/exceptions/new" element={<RequireProfile><ExceptionNew /></RequireProfile>} />
         <Route path="/exceptions/:id" element={<RequireProfile><ExceptionView backTo="/home" /></RequireProfile>} />
+        <Route path="/maintenance/:machineId" element={<RequireProfile><Maintenance /></RequireProfile>} />
         <Route path="/manager" element={<RequireManager><ManagerDashboard /></RequireManager>} />
         <Route path="/manager/report/:id" element={<RequireManager><ManagerReport /></RequireManager>} />
         <Route path="/manager/parts" element={<RequireManager><ManagerParts /></RequireManager>} />
