@@ -1487,28 +1487,36 @@ function TaskRow({ task, onSaved, onDeleted }) {
   }
 
   return (
-    <li className="flex items-center gap-2 group">
+    <li className="flex items-center gap-1 group rounded px-1 -mx-1 hover:bg-muted/60">
       <span className="flex-1 text-sm">{task.task_name}</span>
-      <button
-        className="btn btn-ghost text-sm !min-h-[28px] !p-1.5"
-        onClick={() => setEditing(true)}
-        aria-label="עריכה"
-      >
-        <PencilIcon size={14} />
-      </button>
-      <button
-        className="btn btn-ghost text-sm !min-h-[28px] !p-1.5 hover:!text-destructive"
-        disabled={busy}
-        onClick={remove}
-        aria-label="מחיקה"
-      >
-        {busy ? <SpinnerIcon size={14} /> : <TrashIcon size={14} />}
-      </button>
+      {/* Row actions stay out of the way until the row is hovered or focused —
+          with 4 periods on screen these icons otherwise dominate the pane. On
+          touch, where there is no hover, they are always visible. */}
+      <span className="flex items-center gap-1 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100">
+        <button
+          className="btn btn-ghost text-sm !min-h-[28px] !p-1.5"
+          onClick={() => setEditing(true)}
+          aria-label="עריכה"
+        >
+          <PencilIcon size={14} />
+        </button>
+        <button
+          className="btn btn-ghost text-sm !min-h-[28px] !p-1.5 hover:!text-destructive"
+          disabled={busy}
+          onClick={remove}
+          aria-label="מחיקה"
+        >
+          {busy ? <SpinnerIcon size={14} /> : <TrashIcon size={14} />}
+        </button>
+      </span>
     </li>
   );
 }
 
 function AddTaskForm({ machinePeriodId, sortOrder, taskNameOptions, onAdded }) {
+  // Collapsed by default: a permanently-open input in every period card gave
+  // four large empty boxes competing with the task lists themselves.
+  const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -1535,6 +1543,19 @@ function AddTaskForm({ machinePeriodId, sortOrder, taskNameOptions, onAdded }) {
     setValue("");
   }
 
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="btn btn-ghost text-xs !min-h-[26px] !px-1 -mx-1 mt-1 self-start text-primary hover:text-accent"
+      >
+        <PlusIcon size={13} />
+        הוספת משימה
+      </button>
+    );
+  }
+
   return (
     <form onSubmit={add} className="flex items-center gap-2 mt-1">
       <input
@@ -1543,6 +1564,20 @@ function AddTaskForm({ machinePeriodId, sortOrder, taskNameOptions, onAdded }) {
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder="הוספת משימה"
+        autoFocus
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            setOpen(false);
+            setValue("");
+            setError("");
+          }
+        }}
+        onBlur={() => {
+          if (!value.trim()) {
+            setOpen(false);
+            setError("");
+          }
+        }}
       />
       <datalist id={listId}>
         {taskNameOptions.map((n) => (
@@ -1563,20 +1598,46 @@ function AddTaskForm({ machinePeriodId, sortOrder, taskNameOptions, onAdded }) {
 
 function PeriodCard({ period, taskNameOptions, onChanged }) {
   const kind = period.maintenance_periods.schedule_kind;
+  const name = period.maintenance_periods.name;
   const tasks = [...period.machine_period_tasks].sort(
     (a, b) => a.sort_order - b.sort_order,
   );
+  const { deleteBusy, remove } = useSoftDeletable(
+    "machine_periods",
+    period.id,
+    onChanged,
+  );
+
+  // Soft delete, so a period that already has recorded visits keeps its
+  // history. Re-adding the same period later revives this exact row (see
+  // AddPeriodForm's upsert), which is why the tasks are safe to leave attached.
+  function confirmRemove() {
+    const note = tasks.length
+      ? ` ${tasks.length} המשימות שלו יישמרו ויחזרו אם תוסיף אותו מחדש.`
+      : "";
+    if (window.confirm(`להסיר את מחזור הטיפול "${name}" ממכונה זו?${note}`)) {
+      remove();
+    }
+  }
 
   return (
-    <div className="rounded-lg border border-border p-3">
-      <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-        <p className="font-bold text-sm">{period.maintenance_periods.name}</p>
-        <p className="text-xs text-primary">
-          {describeAnchor(period, kind)} · תאריך יעד הבא:{" "}
-          {formatDate(period.next_due_date)}
+    <div className="group/card rounded-lg border border-border p-3">
+      <div className="flex items-baseline gap-2 mb-2">
+        <p className="font-bold text-sm shrink-0">{name}</p>
+        <p className="text-xs text-primary truncate flex-1">
+          {describeAnchor(period, kind)} · {formatDate(period.next_due_date)}
         </p>
+        <button
+          type="button"
+          onClick={confirmRemove}
+          disabled={deleteBusy}
+          aria-label={`הסרת מחזור טיפול ${name}`}
+          className="btn btn-ghost text-sm !min-h-[26px] !p-1 shrink-0 hover:!text-destructive transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/card:opacity-100 [@media(hover:hover)]:group-focus-within/card:opacity-100"
+        >
+          {deleteBusy ? <SpinnerIcon size={14} /> : <TrashIcon size={14} />}
+        </button>
       </div>
-      <ul className="flex flex-col gap-1">
+      <ul className="flex flex-col">
         {tasks.map((t) => (
           <TaskRow
             key={t.id}
@@ -1586,7 +1647,7 @@ function PeriodCard({ period, taskNameOptions, onChanged }) {
           />
         ))}
         {tasks.length === 0 && (
-          <li className="text-xs text-primary">אין משימות עדיין</li>
+          <li className="text-xs text-primary/70">אין משימות עדיין</li>
         )}
       </ul>
       <AddTaskForm
@@ -1647,17 +1708,27 @@ function AddPeriodForm({ machineId, availablePeriods, onAdded }) {
       setError("חישוב תאריך היעד נכשל — נסו שוב");
       return;
     }
-    const { error: err } = await supabase.from("machine_periods").insert({
-      machine_id: machineId,
-      period_id: form.period_id,
-      weekday: kind === "weekly" ? form.weekday : null,
-      day_of_month: kind === "monthly" ? form.day_of_month : null,
-      anchor_month:
-        kind === "triannual" || kind === "yearly" ? form.anchor_month : null,
-      anchor_day:
-        kind === "triannual" || kind === "yearly" ? form.anchor_day : null,
-      next_due_date: dueDate,
-    });
+    // Upsert, not insert: machine_periods has UNIQUE (machine_id, period_id),
+    // and removing a period only soft-deletes its row — so a plain insert would
+    // fail for any period that was ever removed from this machine. Conflicting
+    // on that pair revives the original row (tasks included) with the newly
+    // chosen anchor.
+    const { error: err } = await supabase.from("machine_periods").upsert(
+      {
+        machine_id: machineId,
+        period_id: form.period_id,
+        weekday: kind === "weekly" ? form.weekday : null,
+        day_of_month: kind === "monthly" ? form.day_of_month : null,
+        anchor_month:
+          kind === "triannual" || kind === "yearly" ? form.anchor_month : null,
+        anchor_day:
+          kind === "triannual" || kind === "yearly" ? form.anchor_day : null,
+        next_due_date: dueDate,
+        is_active: true,
+        deleted_at: null,
+      },
+      { onConflict: "machine_id,period_id" },
+    );
     setBusy(false);
     if (err) {
       setError("ההוספה נכשלה — נסו שוב");
