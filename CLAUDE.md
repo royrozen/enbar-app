@@ -35,6 +35,17 @@ Runs automatically before every build via the `prebuild` npm hook. It does two u
 
 **Draft persistence:** `src/pages/ReportNew.jsx` autosaves text fields (not photos) to `localStorage` (`enbar_report_draft`) so an interrupted report isn't lost.
 
-**Env vars:** `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (`.env` / `.env.local`, gitignored). `src/lib/supabase.js` falls back to hardcoded project values if unset, so the app builds/runs even without an env file.
+**Env vars:** `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (`.env` / `.env.local`, gitignored). `src/lib/supabase.js` falls back to hardcoded project values if unset, so the app builds/runs even without an env file. **Those hardcoded fallbacks point at dev** — if Vercel's env vars were ever cleared, production would silently start reading and writing the dev database rather than failing.
 
-**Deployment:** Vercel, SPA rewrite in `vercel.json` sends all paths to `index.html`.
+**There are two Supabase projects, and keeping them in sync is manual:**
+
+| | Project | Used by |
+|---|---|---|
+| dev | `enbar-Webapp-dev` (`svsuntixvxwwuggtqsws`) | `npm run dev`, local `.env`, the hardcoded fallback |
+| prod | `enbar-Webapp-prod` (`dfdayxzfndkwqvymqcvf`) | `enbar-reports.vercel.app` |
+
+**Merging to `main` deploys to production immediately** (Vercel auto-deploys `main` to `enbar-reports.vercel.app`, which runs against the prod database). There is no staging step. So **a migration applied only to dev is a production outage waiting for the next merge** — apply schema changes to *both* projects at the time you write them, or prod breaks the moment the code that needs them lands.
+
+This has already happened once: on 2026-09-16 the entire maintenance module's schema (17 migrations) existed only in dev, so merging the feature broke `/manager/settings` in production. The two databases also have *different migration histories* (prod was built via its own `prod_align_*` migrations), so never assume a dev migration replays cleanly onto prod — check prod's actual state first, especially for anything that rewrites existing RLS policies.
+
+**Deployment:** Vercel (project `enbar-reports`), SPA rewrite in `vercel.json` sends all paths to `index.html`. Every push builds a preview; **`main` builds production** at `enbar-reports.vercel.app` — see the two-database note above before merging anything with a schema dependency.

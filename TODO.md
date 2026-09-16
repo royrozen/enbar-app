@@ -1,8 +1,7 @@
 # TODO
 
 ## Now
-- **Guard against dev/prod schema drift.** On 2026-09-16 the עובדים tab broke in production because all 17 maintenance migrations had been applied to dev only, while `main` auto-deploys to a prod that runs against `enbar-Webapp-prod`. Prod is fully synced now, but nothing prevents a repeat: there is no check that a migration applied to dev also reaches prod, and `main` deploys regardless. Decide on a guard (apply to both at the time of writing, a pre-deploy schema diff, or migrations committed to the repo and applied by CI).
-- Re-upload the two machine #001 part photos in **prod** if they're wanted there (בוכנה הולנדית, רצועת מנוע). Their rows were copied but `photo_storage_path` is NULL — the image objects live in dev's `machine-parts` bucket and can't be moved by SQL.
+- **An *automated* guard against dev/prod schema drift.** The hazard is now documented in CLAUDE.md (two Supabase projects; `main` auto-deploys straight to production; apply every migration to both), which addresses the cause — sessions not knowing prod existed — but it is still only a convention. A real check would be better: a `db:diff` script, a pre-deploy schema comparison, or migrations committed to the repo and applied by CI. Note this needs credentials the repo doesn't currently carry (the anon key can't introspect `information_schema`), so it's a small infra decision, not a quick script.
 
 ## Next
 - **Printed QR stickers bake in the app's hostname.** They encode `https://enbar-reports.vercel.app/maintenance/<uuid>`, from `APP_BASE_URL` in `src/lib/urls.js` (override: `VITE_PUBLIC_BASE_URL`). If the app ever moves to a custom domain or off Vercel, that constant must change **and every sticker already glued to a machine is invalidated** — either reprint all 21 machines or keep the old host alive as a permanent redirect. Decide the final hostname before any large print run.
