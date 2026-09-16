@@ -1,6 +1,22 @@
 # HANDOFF
 
-Written 2026-09-15, for a reader with zero prior context.
+Written 2026-09-16, for a reader with zero prior context.
+
+## Read this first: there are two databases, and they drifted
+- `enbar-Webapp-dev` (`svsuntixvxwwuggtqsws`) — what `npm run dev` and `.env`
+  point at.
+- `enbar-Webapp-prod` (`dfdayxzfndkwqvymqcvf`) — what
+  **`enbar-reports.vercel.app` runs against**, and that host **auto-deploys
+  on every merge to `main`**. So merging to `main` ships to a live system
+  immediately; it is not a staging URL.
+
+On 2026-09-16 this bit: all 17 maintenance-module migrations had been applied
+to dev only, so the moment the maintenance code reached `main`, prod's
+עובדים tab broke (`column "maintenance_access_enabled" does not exist`) and
+every maintenance screen was dead there. Prod has since been fully synced and
+now matches dev row-for-row, **but nothing prevents a repeat** — see TODO.md
+"Now". If you apply a migration to dev, apply it to prod too, or the next
+merge breaks production.
 
 ## Branches
 - `feat/factory-worker-self-provisioning` — **merged to `main`** (PR #4). Phase 5:

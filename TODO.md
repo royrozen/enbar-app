@@ -1,7 +1,8 @@
 # TODO
 
 ## Now
-- Review + PR + merge branch `feat/maintenance-checklist-flow` (Phase 6: field checklist flow at `/maintenance/:machineId`) — built, build-clean, both new DB functions verified role-simulated against the dev DB, and click-through confirmed by Roy in a real logged-in browser. Not yet pushed.
+- **Guard against dev/prod schema drift.** On 2026-09-16 the עובדים tab broke in production because all 17 maintenance migrations had been applied to dev only, while `main` auto-deploys to a prod that runs against `enbar-Webapp-prod`. Prod is fully synced now, but nothing prevents a repeat: there is no check that a migration applied to dev also reaches prod, and `main` deploys regardless. Decide on a guard (apply to both at the time of writing, a pre-deploy schema diff, or migrations committed to the repo and applied by CI).
+- Re-upload the two machine #001 part photos in **prod** if they're wanted there (בוכנה הולנדית, רצועת מנוע). Their rows were copied but `photo_storage_path` is NULL — the image objects live in dev's `machine-parts` bucket and can't be moved by SQL.
 
 ## Next
 - **Printed QR stickers bake in the app's hostname.** They encode `https://enbar-reports.vercel.app/maintenance/<uuid>`, from `APP_BASE_URL` in `src/lib/urls.js` (override: `VITE_PUBLIC_BASE_URL`). If the app ever moves to a custom domain or off Vercel, that constant must change **and every sticker already glued to a machine is invalidated** — either reprint all 21 machines or keep the old host alive as a permanent redirect. Decide the final hostname before any large print run.
@@ -23,6 +24,8 @@
 - תחזוקת מכונות add-period form (`AddPeriodForm` in `src/pages/ManagerSettings.jsx`): collapse the separate select + "+ הוספה" submit button into one control — pick a period from the "הוספת מחזור טיפול" dropdown and have it add immediately (or open the anchor inputs inline), no extra button click. Cosmetic, deferred by Roy.
 
 ## Done
+- Maintenance module Phase 6 (branch `feat/maintenance-checklist-flow`, merged to `main` 2026-09-16 as PR #5): field checklist at `/maintenance/:machineId`, `advance_machine_period()` + `machine_week_checked_tasks()`, already-checked tasks locked and dated, and machine QR codes switched from a bare UUID to a full URL. See CHANGELOG.md.
+- Production database sync (2026-09-16): the whole maintenance module plus `profiles.display_name` applied to `enbar-Webapp-prod`, which had none of it. Prod now matches dev row-for-row (22 machines / 4 periods / 32 period assignments / 80 tasks / 42 parts, same UUIDs). See CHANGELOG.md for what was skipped and why.
 - Maintenance module Phase 5 (branch `feat/factory-worker-self-provisioning`, merged to `main` 2026-09-14 as PR #4): factory_worker self-provisioning on first OTP login + `getModuleAccess()` helper + `resolve_own_employee()`. Roy ran the real OTP login as `0503332121` (לב קושב) on 2026-09-15 and the `profiles` row was created correctly (`role=factory_worker`, employee linked, display name set). See CHANGELOG.md.
 - Maintenance module Phase 3-revision (branch `fix/period-anchor-datepicker`, merged to `main` 2026-09-14): yearly/triannual schedule-anchor UI switched from two number inputs to a single date picker (year discarded, only month+day kept); `machine_periods.anchor_day` CHECK loosened 1-28 → 1-31; `compute_next_due_date()` gained a Feb-29-in-a-non-leap-year → March 1 shift. See CHANGELOG.md for full detail.
 - Desktop layout for `תחזוקת מכונות` (branch `fix/settings-desktop-layout`, merged to `main` 2026-09-14): split-console layout at `lg:`, part-detail expand on click, QR-print popup replacing the inline canvas, machine search, and the `.manager-desktop select.input` padding-specificity fix. See CHANGELOG.md for full detail.
