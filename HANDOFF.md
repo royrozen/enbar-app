@@ -1,116 +1,116 @@
 # HANDOFF
 
-Written 2026-09-14, for a reader with zero prior context.
+Written 2026-09-15, for a reader with zero prior context.
 
 ## Branches
-- `fix/settings-desktop-layout` — **merged to `main`**. Desktop split-console
-  redesign, part-detail expand, QR print popup, machine search, select-arrow
-  CSS fix, CLAUDE.md auth doc fix.
-- `fix/period-anchor-datepicker` — **merged to `main`**. Phase 3-revision:
-  yearly/triannual anchor is now a date picker, `anchor_day` loosened to
-  1-31, Feb-29 shift rule.
-- `feat/factory-worker-self-provisioning` — **new, built and verified at the
-  DB/RLS level, not yet merged.** Phase 5 (see below). Blocked on a real
-  phone-OTP login test that only Roy can run.
+- `feat/factory-worker-self-provisioning` — **merged to `main`** (PR #4). Phase 5:
+  factory_worker self-provisioning on first OTP login. Roy ran the real
+  phone-OTP login himself on 2026-09-15 and it worked — the `profiles` row
+  was created with `role=factory_worker`, the right `employee_id`, and the
+  employee's name as `display_name`. That was the one thing the previous
+  handoff listed as unverified; it is now verified.
+- `feat/maintenance-checklist-flow` — **current branch, built and working,
+  not yet pushed or merged.** Phase 6 (see below).
 
 ## Where things stand
-### Phase 5 — factory_worker self-provisioning (this session, current branch)
-Per PRD §4.0: when a `factory_worker` logs in via OTP for the first time,
-there's no `profiles` row for them. Previously `AuthContext.jsx` treated any
-missing profile as an error and signed the user out. This phase makes the
-app attempt to create that row itself first:
+### Phase 6 — field checklist flow (this session, current branch)
+New route `/maintenance/:machineId` (`src/pages/Maintenance.jsx`), per PRD
+§7.3. What it does:
 
-- **`src/lib/auth.js`** — `provisionFactoryWorker(session)`: calls the new
-  `resolve_own_employee()` RPC, and if it resolves an employee, attempts
-  `INSERT INTO profiles (id, role, phone, employee_id, display_name)`
-  under the user's own session. Returns `false` on any Postgres rejection.
-- **`src/lib/AuthContext.jsx`** — `loadProfile()` now tries
-  `provisionFactoryWorker` once when `fetchProfile` comes back empty, then
-  re-fetches. Falls through to the existing "אין לך הרשאה..." error/sign-out
-  path unchanged if provisioning didn't succeed — no new error copy was
-  added, the existing message already fits.
-- **New DB function `resolve_own_employee()`** (SECURITY DEFINER, migration
-  `add_resolve_own_employee_for_self_provisioning`, applied to
-  `enbar-Webapp-dev`): **not in the original phase spec, but necessary** —
-  `employees` is manager-only `SELECT` (see `pg_policies`), so a
-  not-yet-provisioned session has no way to look up its own `employee_id`/
-  name to build the insert. This function derives everything from
-  `auth.jwt() ->> 'phone'` internally (never a parameter), so it can only
-  ever resolve the caller's own phone, mirroring the exact predicate
-  `employee_access_match()` already uses for the Phase 1 RLS gate. No new
-  RLS policy was added to `employees` itself — this was the narrower option.
-- **`src/lib/maintenanceAccess.js`** (new) — `getModuleAccess(profile)`,
-  the small shared helper for Phase 6/7. For `role !== 'factory_worker'`
-  returns `{ role, hasAccess: null }` (this module doesn't define other
-  roles' access policy — not this phase's call to make). For
-  `factory_worker`, live-calls the existing `employee_access_match()` RPC
-  (already `GRANT EXECUTE`d to `authenticated`) — no caching, no new schema
-  needed for this half.
+- Machine header (`#{machine_no}` zero-padded, name, location).
+- Shows only the machine's periods whose `next_due_date` falls inside the
+  current calendar week (Sunday-Friday), grouped by period name with the
+  due date shown next to it (e.g. `שבועי — 17/09/2026`). One checkbox per
+  `machine_period_tasks` row.
+- **No worker/name picker anywhere** — this is explicitly forbidden by the
+  phase spec; identity comes from the session (`maintenance_visits.profile_id`).
+- Submit writes one `maintenance_visits` row, then per due period a
+  `machine_period_logs` row (`fully_completed` only when every task in that
+  period is checked) and one `machine_period_log_tasks` row per task.
+  Only fully-completed periods advance their `next_due_date`.
+- An always-visible `דיווח תקלה / שבר` link. **Its destination doesn't exist
+  yet** — Phase 7 builds `/maintenance/:machineId/fault`, so today clicking
+  it hits App.jsx's catch-all `*` route and lands on the login screen. This
+  is expected, not a bug; the phase spec requires the link to be present.
 
-### Verification done this session for Phase 5
-All at the DB level, simulating the exact insert/RPC shapes the client code
-produces (`SET LOCAL ROLE authenticated` + `set_config('request.jwt.claims', ...)`
-against a real `auth.users` row):
-- Eligible phone (matching, active, access-enabled employee) → insert
-  succeeds, `resolve_own_employee()` correctly resolves `employee_id` +
-  `display_name`.
-- Unmatched phone (no `employees` row at all) → insert rejected by RLS
-  (`42501: new row violates row-level security policy`).
-- Matched employee with `maintenance_access_enabled = false` →
-  `resolve_own_employee()` returns zero rows, so `employee_id` is null and
-  the insert is rejected the same way.
-- Live re-check, no caching: provisioned a test profile, called
-  `employee_access_match()` (false, access was off), flipped
-  `maintenance_access_enabled` to `true`, called again in the same
-  session — flipped to `true` immediately, no logout involved. This is
-  exactly what `getModuleAccess()` wraps.
-- All test rows (the temp profile, the unverified `auth.users` row created
-  by a failed OTP-send attempt during testing) were deleted afterward — dev
-  DB is clean. The one real employee phone Roy set up for testing
-  (`0503332121`, לב קושב) was left with `maintenance_access_enabled = true`,
-  its intended state.
+### Two DB functions added this phase (both beyond the literal phase spec, both necessary)
+Same judgement call as Phase 5's `resolve_own_employee()`: a narrow
+SECURITY DEFINER function was the smaller option than widening RLS.
+
+1. **`advance_machine_period(p_log_id uuid)`** — `machine_periods` UPDATE is
+   manager-only, so a factory_worker has no way to roll a period's
+   `next_due_date` forward after completing it. This resolves everything
+   from a log row the caller's own visit produced (ownership via
+   `maintenance_visits.profile_id = auth.uid()`) and only acts when that log
+   is already `fully_completed`; it can't be pointed at an arbitrary
+   `machine_period_id`.
+2. **`machine_week_checked_tasks(machine_id, week_start, week_end)`** — the
+   SELECT policies on `machine_period_log_tasks`/`machine_period_logs`/
+   `maintenance_visits` are own-visit-only, so a task checked by worker A on
+   Monday would be invisible to worker B on Thursday. This returns only the
+   task ids already checked in the given week for that machine plus when,
+   gated on the same `maintenance_access()` predicate the INSERT policies
+   already use — so it grants nothing to anyone who couldn't already write a
+   visit for that machine.
+
+### Behaviour worth knowing: already-done tasks are locked
+A task checked off earlier this week renders **checked, disabled, and dated**
+(`✓ 14/09/2026`). Roy asked for this explicitly. It replaced an earlier
+localStorage draft of *unsubmitted* checkbox state, which he rejected —
+**only submitted work persists; nothing is saved until Submit.** Don't
+reintroduce a draft.
+
+### Two incidental fixes in this phase
+- `RequireProfile` (App.jsx) now passes the intercepted path as
+  `location.state.from`, and `Login.jsx` returns there after OTP instead of
+  always going to the role's default home. Phase 6's acceptance criteria
+  require a signed-out QR scan to come back to the same machine. Note this
+  only covers the in-app intercept — a hard browser refresh drops React
+  Router's history state, so that path still falls back to the default home.
+- The Sunday-Friday week range is now built from local date parts rather
+  than `toISOString()`, which was putting an evening visit on the previous
+  UTC day.
+
+### Verification done this session
+- `advance_machine_period`: advances correctly on a fully-completed log
+  (weekly 2026-09-17 → 2026-09-24), returns NULL for an incomplete log, and
+  returns NULL when a different `auth.uid()` tries to advance someone else's
+  log. All role-simulated (`SET LOCAL ROLE authenticated` + `request.jwt.claims`)
+  inside transactions that were rolled back — dev DB unchanged.
+- `machine_week_checked_tasks`: returns the right task ids + timestamps for
+  the week, and zero rows for a user without maintenance access.
 - `npm run build` clean.
-
-**NOT verified — needs Roy specifically:** an actual phone-OTP login
-click-through. This agent tried logging in as `0503332121` with the OTP
-`123456` (the one working test code known from earlier in this session) and
-it was rejected — that code is apparently whitelisted only for
-`0503338181`, not this new number. An agent session can't receive real SMS,
-so Roy needs to run the real login himself (or share a working test OTP for
-that number) before this branch can be trusted end-to-end and merged.
+- **Roy confirmed the real UI in his own logged-in browser** — the checklist
+  renders, and after his 2026-09-14 submission (5 of 6 weekly tasks checked
+  on machine #001 קו ייצור) those five now show locked with their date.
 
 ## Test credentials (local dev only)
-Real Supabase phone-OTP login: phone `0503338181`, OTP `123456` — this one
-already has an existing `factory_manager` profile, so it will **never**
-exercise the new self-provisioning path (it short-circuits at the first
-`fetchProfile`). To test Phase 5 itself, log in as `0503332121` (לב קושב) —
-OTP unknown to this agent, real SMS or a configured test code needed.
+- `0503338181` / OTP `123456` — existing `factory_manager`, so it never
+  exercises the factory_worker paths.
+- `0503332121` (לב קושב) — the real factory_worker test account. Real SMS,
+  no fixed test code; **only Roy can run this login**, an agent session
+  can't receive SMS. Its `profiles` row now exists, so it no longer
+  exercises self-provisioning either.
 
 ## What's next
-1. Roy runs a real OTP login as `0503332121` and confirms: profile gets
-   created, session proceeds normally (currently lands on `/manager` per
-   existing `Login.jsx` redirect logic — see note below).
-2. If that works: push branch → `gh pr create` → merge, same flow as the
-   previous two branches.
-3. Phase 6 — field checklist flow (new `/maintenance/:machineId` route) is
-   next after that. It's the natural place to also fix the routing gap
-   noted below, since it's the phase that actually defines where a
-   `factory_worker` should land.
-4. `fault-reports` Storage bucket still has no `storage.objects` RLS
-   policies (same gap `machine-parts` had, fixed in Phase 4) — Phase 7's job.
+1. Push `feat/maintenance-checklist-flow` → `gh pr create` → merge, same
+   flow as the last two branches.
+2. Phase 7 — fault report flow (`/maintenance/:machineId/fault`). This also
+   gives the existing checklist link a real destination. Note the
+   `fault-reports` Storage bucket still has **no `storage.objects` RLS
+   policies** (the same gap `machine-parts` had, fixed in Phase 4) — photo
+   uploads there will fail silently until that's fixed, so do it as part of
+   Phase 7.
+3. Phase 8 — manager reports. There is currently no manager-facing UI for
+   any of this: managers have SELECT-all RLS on the visit/log tables but
+   nothing renders them, so submitted checklists are only visible via a
+   direct DB query. Roy asked about this explicitly, so it's wanted.
 
 ## The one thing to remember
-**A successfully-provisioned `factory_worker` currently lands on `/manager`**
-(`Login.jsx`'s redirect is `profile.role === 'team_lead' ? '/home' : '/manager'`,
-and `RequireManager` doesn't exclude `factory_worker`) — there is no
-`factory_worker`-specific route yet since Phase 6 hasn't been built. This
-is a known, expected gap, not a bug in this phase: Phase 5's own spec scope
-was self-provisioning only, and guessing at Phase 6's eventual routing now
-would be over-building. Don't be surprised if a first successful worker
-login looks like it landed somewhere odd — that's expected until Phase 6.
-
-Also: `resolve_own_employee()` (this phase's one schema addition beyond the
-spec) is now part of the app's permanent security surface, same trust level
-as `employee_access_match()` — if either is ever revisited, revisit them
-together, they encode the same access predicate in two different shapes
-(one for "find my employee row", one for "check my employee row").
+There are now **four** SECURITY DEFINER functions carrying the maintenance
+module's access rules: `maintenance_access()`, `employee_access_match()`,
+`resolve_own_employee()`, and this phase's `machine_week_checked_tasks()`
+(plus `advance_machine_period()`, which enforces ownership rather than
+module access). They encode overlapping predicates in different shapes. If
+one is ever revisited, read all of them together — changing the access rule
+in one place and not the others is the obvious way to put a hole in this.
