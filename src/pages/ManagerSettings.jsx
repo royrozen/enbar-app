@@ -33,6 +33,7 @@ import {
   fetchMonthlyCounts,
 } from "../lib/lunch";
 import { formatDate, todayISO } from "../lib/format";
+import { machineQrUrl } from "../lib/urls";
 
 const TABS = [
   { key: "clients", label: "לקוחות", Icon: UsersIcon },
@@ -1298,7 +1299,11 @@ function MachineQr({ machineId, machineNo }) {
 
   useEffect(() => {
     if (canvasRef.current) {
-      QRCode.toCanvas(canvasRef.current, machineId, { width: 160, margin: 1 });
+      QRCode.toCanvas(canvasRef.current, machineQrUrl(machineId), {
+        width: 160,
+        margin: 1,
+        errorCorrectionLevel: "H",
+      });
     }
   }, [machineId]);
 
@@ -1340,7 +1345,17 @@ async function printMachineQr(machine) {
   // (async) QR render resolves, using the handle we already have.
   const win = window.open("", "_blank", "width=420,height=560");
   if (!win) return;
-  const qrDataUrl = await QRCode.toDataURL(machine.id, { width: 320, margin: 1 });
+  // errorCorrectionLevel 'H' (30% recovery, vs the default 'M' at 15%) —
+  // these stickers live on oily, dusty machines and will get scratched. The
+  // density cost is affordable here: the ~81-char URL renders as 49x49
+  // modules, still ~1.3mm per module at the 240px print size below, well
+  // clear of the ~0.5mm floor where phone cameras start struggling.
+  const qrUrl = machineQrUrl(machine.id);
+  const qrDataUrl = await QRCode.toDataURL(qrUrl, {
+    width: 320,
+    margin: 1,
+    errorCorrectionLevel: "H",
+  });
   const machineNo = String(machine.machine_no).padStart(3, "0");
   win.document.write(`<!doctype html>
 <html dir="rtl" lang="he">
@@ -1379,6 +1394,14 @@ async function printMachineQr(machine) {
     border-radius: 12px;
     margin-top: 6px;
   }
+  p.url {
+    font-family: monospace;
+    font-size: 9px;
+    color: #8090a6;
+    margin: 0;
+    direction: ltr;
+    word-break: break-all;
+  }
 </style>
 </head>
 <body>
@@ -1387,6 +1410,7 @@ async function printMachineQr(machine) {
   <h1>${escapeHtml(machine.name)}</h1>
   ${machine.location ? `<p class="sub">${escapeHtml(machine.location)}</p>` : ""}
   <img class="qr" src="${qrDataUrl}" alt="QR" />
+  <p class="url">${escapeHtml(qrUrl)}</p>
   <script>window.onload = () => window.print();</script>
 </body>
 </html>`);
