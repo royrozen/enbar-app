@@ -138,10 +138,26 @@ export default function Maintenance() {
     )
   }
 
+  // Everything due on or before the end of this week — deliberately NOT
+  // bounded below by weekStart. Bounding it that way made a period that was
+  // never completed drop off the checklist the moment its week ended, which
+  // is precisely when it most needs to be shown. Overdue ones sort first and
+  // are flagged, so late work escalates instead of disappearing.
   const duePeriods = (machine.machine_periods || [])
     .filter((mp) => mp.is_active && !mp.deleted_at)
-    .filter((mp) => mp.next_due_date >= weekStart && mp.next_due_date <= weekEnd)
-    .map((mp) => ({ ...mp, machine_period_tasks: [...mp.machine_period_tasks].sort((a, b) => a.sort_order - b.sort_order) }))
+    .filter((mp) => mp.next_due_date <= weekEnd)
+    .map((mp) => ({
+      ...mp,
+      overdue: mp.next_due_date < weekStart,
+      machine_period_tasks: [...mp.machine_period_tasks].sort((a, b) => a.sort_order - b.sort_order),
+    }))
+    .sort((a, b) =>
+      a.overdue === b.overdue
+        ? a.next_due_date.localeCompare(b.next_due_date)
+        : a.overdue
+          ? -1
+          : 1,
+    )
 
   // A task checked off earlier this week is already recorded — it stays
   // checked and locked until its period rolls over to a new due date.
@@ -258,10 +274,17 @@ export default function Maintenance() {
           >
             {duePeriods.map((period) => (
               <div key={period.id} className="card p-4">
-                <p className="font-bold mb-3">
-                  {period.maintenance_periods.name}
-                  <span className="font-medium text-primary"> — {formatDate(period.next_due_date)}</span>
-                </p>
+                <div className="flex items-center gap-2 flex-wrap mb-3">
+                  <p className="font-bold">{period.maintenance_periods.name}</p>
+                  <span className={period.overdue ? 'font-medium text-destructive' : 'font-medium text-primary'}>
+                    {formatDate(period.next_due_date)}
+                  </span>
+                  {period.overdue && (
+                    <span className="text-xs font-bold text-destructive border border-destructive/40 bg-red-50 rounded-full px-2 py-0.5">
+                      באיחור
+                    </span>
+                  )}
+                </div>
                 <div className="flex flex-col gap-2">
                   {period.machine_period_tasks.map((task) => {
                     const doneAt = alreadyDone[task.id]
