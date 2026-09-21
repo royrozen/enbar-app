@@ -1,6 +1,7 @@
 # TODO
 
 ## Now
+- **Migration files in `supabase/migrations/` have fallen out of sync with the databases.** The maintenance module's entire Phase 1 schema, the `platform_admin` widening, and all four Phase 5/6 functions (`resolve_own_employee`, `advance_machine_period`, `machine_week_checked_tasks`, `loosen_anchor_day_and_feb29_shift`) exist in dev and prod but have **no file in the repo** — they were applied through the Supabase MCP only. So git no longer records what the schema should be, which is the same root cause as the dev/prod drift below. Back-fill the missing files from `supabase_migrations.schema_migrations` on dev, then keep writing migrations as files.
 - **An *automated* guard against dev/prod schema drift.** The hazard is now documented in CLAUDE.md (two Supabase projects; `main` auto-deploys straight to production; apply every migration to both), which addresses the cause — sessions not knowing prod existed — but it is still only a convention. A real check would be better: a `db:diff` script, a pre-deploy schema comparison, or migrations committed to the repo and applied by CI. Note this needs credentials the repo doesn't currently carry (the anon key can't introspect `information_schema`), so it's a small infra decision, not a quick script.
 
 ## Next
